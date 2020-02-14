@@ -1,1 +1,6 @@
 .idea
+*.tar.gz
+data/gt/*
+data/renders/*
+data/tf_records/*
+
