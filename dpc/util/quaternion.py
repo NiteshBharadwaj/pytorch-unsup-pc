@@ -19,6 +19,9 @@ import torch
 import numpy as np
 import torch.nn.functional as F
 
+
+# TODO: Fix functions in this file. This path is not being taken in default train config. None of these functions are being called except last numpy function
+
 def validate_shape(x):
     """Raise a value error if x.shape ist not (..., 4)."""
     error_msg = ("Can't create a quaternion from a tensor with shape {}."
