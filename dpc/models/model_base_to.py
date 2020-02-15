@@ -20,7 +20,6 @@ class ModelBase(nn.Module):
     def cfg(self):
         return self._params
 
-    # TODO: Heavily depends on correct understanding of masked select and it's relation with gather_nd
     def preprocess(self, raw_inputs, step_size, random_views=True):
         """Selects the subset of viewpoints to train on."""
         cfg = self.cfg()

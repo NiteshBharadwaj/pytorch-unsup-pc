@@ -32,14 +32,12 @@ def init_weights(m):
 
 def tf_repeat_0(input, num):
     orig_shape = input.shape
-    #e = tf.expand_dims(input, axis=1)
-    # TODO: Reshape to meet specifications
-    e = input
+    new_shape = [*input.shape].copy()
+    new_shape.insert(1,1)
+    e = input.reshape(new_shape)
     tiler = [1 for _ in range(len(orig_shape)+1)]
     tiler[1] = num
-    # TODO: Use repeat function to reflect the tiler
-    #tiled = tf.tile(e, tiler)
-    tiled = e
+    tiled = e.repeat(tiler)
     new_shape = [-1]
     new_shape.extend(orig_shape[1:])
     final = tiled.reshape(new_shape)
