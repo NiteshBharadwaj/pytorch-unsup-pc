@@ -6,9 +6,10 @@ from util.camera import camera_from_blender, quaternion_from_campos
 
 def pool_single_view(cfg, tensor, view_idx):
     indices = np.arange(cfg.batch_size) * cfg.step_size + view_idx
-    indices = np.expand_dims(indices, -1)
-    return tensor.masked_select[indices]
+    return tensor[indices]
 
+def select_2d(data, indices):
+    return data[[indices[:,0], indices[:,1]]]
 
 class ModelBase(nn.Module):
 
@@ -23,10 +24,9 @@ class ModelBase(nn.Module):
     def preprocess(self, raw_inputs, step_size, random_views=True):
         """Selects the subset of viewpoints to train on."""
         cfg = self.cfg()
-
         var_num_views = cfg.variable_num_views
 
-        num_views = raw_inputs['image'].get_shape().as_list()[1]
+        num_views = raw_inputs['image'].shape[1]
         quantity = cfg.batch_size
         if cfg.num_views_to_use == -1:
             max_num_views = num_views
@@ -69,13 +69,10 @@ class ModelBase(nn.Module):
 
         indices = indices.reshape(step_size*quantity, 2)
         inputs['valid_samples'] = valid_samples.reshape(step_size*quantity)
-
-
-        # TODO: Whether masked select does exactly as gather_nd
-        inputs['masks'] =  raw_inputs['mask'].masked_select(indices)
-        inputs['images'] = raw_inputs['image'].masked_select(indices)
+        inputs['masks'] =  select_2d(raw_inputs['mask'], indices)
+        inputs['images'] = select_2d(raw_inputs['image'],indices)
         if cfg.saved_depth:
-            inputs['depths'] = raw_inputs['depth'].masked_select(indices)
+            inputs['depths'] = select_2d(raw_inputs['depth'],indices)
         inputs['images_1'] = pool_single_view(cfg, inputs['images'], 0)
 
         def fix_matrix(extr):
@@ -93,14 +90,13 @@ class ModelBase(nn.Module):
             return out
 
         if cfg.saved_camera:
-            matrices = raw_inputs['extrinsic'].masked_select[indices]
+            matrices = select_2d(raw_inputs['extrinsic'],indices)
             orig_shape = matrices.shape
             extr_tf = fix_matrix(matrices)
             inputs['matrices'] = extr_tf.reshape(orig_shape)
 
-            cam_pos = raw_inputs['cam_pos'].masked_select[indices]
+            cam_pos = select_2d(raw_inputs['cam_pos'],indices)
             orig_shape = cam_pos.shape
             quaternion = quaternion_from_campos_wrapper(cam_pos)
             inputs['camera_quaternion'] = quaternion.reshape(orig_shape[0], 4)
-
         return inputs

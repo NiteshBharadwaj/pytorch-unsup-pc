@@ -170,3 +170,6 @@ vis_dist: 2.0  # In degrees
 render_image_size: 256  # size of rendered image
 render_cycles_samples: 500  # number of samples in CYCLES renderer
 render_colored_subsets: false
+
+
+input_shape: [128,128,3]

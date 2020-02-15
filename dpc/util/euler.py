@@ -1,7 +1,6 @@
 import math
 import numpy as np
 
-import tensorflow as tf
 from util.quaternion import quaternion_multiply_np as q_mul_np
 
 

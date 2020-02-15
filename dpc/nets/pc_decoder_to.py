@@ -25,7 +25,7 @@ class Decoder(nn.Module):
         self.rgb_deep_decoder = nn.Sequential(nn.Linear(input_dim, input_dim), lReLU, nn.Linear(input_dim, input_dim),
                                               lReLU,
                                               nn.Linear(input_dim, input_dim), lReLU)
-        self.rgb_deep_decoder.aply(init_weights)
+        self.rgb_deep_decoder.apply(init_weights)
 
         self.rgb_raw_dec = nn.Linear(input_dim, num_points * 3)
         self.rgb_raw_dec.apply(init_weights)  ## TODO: Original implementation uses truncated normal intialization here

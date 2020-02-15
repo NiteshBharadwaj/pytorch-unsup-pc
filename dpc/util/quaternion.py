@@ -15,9 +15,9 @@
 #
 # Website: https://github.com/PhilJd/tf-quaternion
 
-import tensorflow as tf
+import torch
 import numpy as np
-
+import torch.nn.functional as F
 
 def validate_shape(x):
     """Raise a value error if x.shape ist not (..., 4)."""
@@ -39,10 +39,10 @@ def vector3d_to_quaternion(x):
     Raises:
         ValueError, if the last dimension of x is not 3.
     """
-    x = tf.convert_to_tensor(x)
+    x = torch.from_numpy(x)
     if x.shape[-1] != 3:
         raise ValueError("The last dimension of x must be 3.")
-    return tf.pad(x, (len(x.shape) - 1) * [[0, 0]] + [[1, 0]])
+    return F.pad(x, (len(x.shape) - 1) * [[0, 0]] + [[1, 0]])
 
 
 def _prepare_tensor_for_div_mul(x):
@@ -52,7 +52,7 @@ def _prepare_tensor_for_div_mul(x):
     b) prepends a 0 in the last dimension if the last dimension is 3,
     c) validates the type and shape.
     """
-    x = tf.convert_to_tensor(x)
+    x = torch.from_numpy(x)
     if x.shape[-1] == 3:
         x = vector3d_to_quaternion(x)
     validate_shape(x)
@@ -69,18 +69,18 @@ def quaternion_multiply(a, b):
     """
     a = _prepare_tensor_for_div_mul(a)
     b = _prepare_tensor_for_div_mul(b)
-    w1, x1, y1, z1 = tf.unstack(a, axis=-1)
-    w2, x2, y2, z2 = tf.unstack(b, axis=-1)
+    w1, x1, y1, z1 = torch.unbind(a, dim=-1)
+    w2, x2, y2, z2 = torch.unbind(b, dim=-1)
     w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
     x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
     y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
     z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
-    return tf.stack((w, x, y, z), axis=-1)
+    return torch.stack((w, x, y, z), dim=-1)
 
 
 def quaternion_conjugate(q):
     """Compute the conjugate of q, i.e. [q.w, -q.x, -q.y, -q.z]."""
-    return tf.multiply(q, [1.0, -1.0, -1.0, -1.0])
+    return torch.multiply(q, [1.0, -1.0, -1.0, -1.0])
 
 
 def quaternion_normalise(q):
@@ -90,7 +90,7 @@ def quaternion_normalise(q):
     Returns:
         q / ||q||_2
     """
-    return q / tf.norm(q, axis=-1, keepdims=True)
+    return q / torch.norm(q, axis=-1, keepdims=True)
 
 
 def quaternion_rotate(pc, q, inverse=False):
@@ -102,9 +102,9 @@ def quaternion_rotate(pc, q, inverse=False):
     Returns:
         q * pc * q'
     """
-    q_norm = tf.expand_dims(tf.norm(q, axis=-1), axis=-1)
+    q_norm = torch.expand(torch.norm(q, axis=-1), axis=-1)
     q /= q_norm
-    q = tf.expand_dims(q, axis=1)  # [B,1,4]
+    q = torch.expand(q, axis=1)  # [B,1,4]
     q_ = quaternion_conjugate(q)
     qmul = quaternion_multiply
     if not inverse:
@@ -112,13 +112,13 @@ def quaternion_rotate(pc, q, inverse=False):
     else:
         wxyz = qmul(qmul(q_, pc), q)  # [B,N,4]
     if len(wxyz.shape) == 2: # bug with batch size of 1
-        wxyz = tf.expand_dims(wxyz, axis=0)
+        wxyz = torch.expand_dims(wxyz, axis=0)
     xyz = wxyz[:, :, 1:4]  # [B,N,3]
     return xyz
 
 
 def normalized(q):
-    q_norm = tf.expand_dims(tf.norm(q, axis=-1), axis=-1)
+    q_norm = torch.expand(torch.norm(q, axis=-1), axis=-1)
     q /= q_norm
     return q
 
@@ -135,7 +135,7 @@ def as_rotation_matrix(q):
     """
     # helper functions
     def diag(a, b):  # computes the diagonal entries,  1 - 2*a**2 - 2*b**2
-        return 1 - 2 * tf.pow(a, 2) - 2 * tf.pow(b, 2)
+        return 1 - 2 * torch.power(a, 2) - 2 * torch.power(b, 2)
 
     def tr_add(a, b, c, d):  # computes triangle entries with addition
         return 2 * a * b + 2 * c * d
@@ -143,11 +143,11 @@ def as_rotation_matrix(q):
     def tr_sub(a, b, c, d):  # computes triangle entries with subtraction
         return 2 * a * b - 2 * c * d
 
-    w, x, y, z = tf.unstack(normalized(q), axis=-1)
+    w, x, y, z = torch.unbind(normalized(q), axis=-1)
     m = [[diag(y, z), tr_sub(x, y, z, w), tr_add(x, z, y, w)],
          [tr_add(x, y, z, w), diag(x, z), tr_sub(y, z, x, w)],
          [tr_sub(x, z, y, w), tr_add(y, z, x, w), diag(x, y)]]
-    return tf.stack([tf.stack(m[i], axis=-1) for i in range(3)], axis=-2)
+    return torch.stack([torch.stack(m[i], axis=-1) for i in range(3)], axis=-2)
 
 
 def from_rotation_matrix(mtr):
@@ -164,15 +164,15 @@ def from_rotation_matrix(mtr):
         size = [s for s in shape]
         size[-2] = 1
         size[-1] = 1
-        v = tf.slice(mtr, begin=begin, size=size)
-        v = tf.squeeze(v, axis=[-1, -2])
+        v = torch.slice(mtr, begin=begin, size=size)
+        v = torch.squeeze(v, axis=[-1, -2])
         return v
 
-    w = tf.sqrt(1.0 + m(0, 0) + m(1, 1) + m(2, 2)) / 2
+    w = torch.sqrt(1.0 + m(0, 0) + m(1, 1) + m(2, 2)) / 2
     x = (m(2, 1) - m(1, 2)) / (4 * w)
     y = (m(0, 2) - m(2, 0)) / (4 * w)
     z = (m(1, 0) - m(0, 1)) / (4 * w)
-    q = tf.stack([w, x, y, z], axis=-1)
+    q = torch.stack([w, x, y, z], axis=-1)
     return q
 
 

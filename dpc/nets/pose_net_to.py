@@ -62,6 +62,7 @@ class PoseNet(nn.Module):
             self.trans_fc.apply(init_weights)  ## TODO: Original implementation uses truncated normal intialization here
         self.tanh = nn.Tanh()
         self.translation_scaling = cfg.predict_translation_scaling_factor
+        self.cfg = cfg
 
     def forward(self, inputs):
         out = {}

@@ -7,7 +7,7 @@ from models.model_base import ModelBase, pool_single_view
 from util.losses import add_drc_loss, add_proj_rgb_loss, add_proj_depth_loss
 from util.point_cloud import pointcloud_project, pointcloud_project_fast, \
     pc_point_dropout
-from util.gauss_kernel import gauss_smoothen_image, smoothing_kernel
+from util.gauss_kernel import smoothing_kernel
 from util.quaternion import \
     quaternion_multiply as q_mul,\
     quaternion_normalise as q_norm,\

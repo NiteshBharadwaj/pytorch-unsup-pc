@@ -20,13 +20,13 @@ class ShapeRecords(data.Dataset):
     def __getitem__(self, index):
         fname = os.path.join(self.dataset_folder, self.file_names[index])
         with open(fname, 'rb') as f:
+            input = {}
             feature = pickle.load(f)
-            image = feature['image']
-            mask = feature['mask']
+            input['image'] = feature['image'].transpose(0,3,1,2)
+            input['mask'] = feature['mask'].transpose(0,3,1,2)
             if self.cfg.saved_camera:
-                extrinsic = feature['extrinsic']
-                cam_pos = feature['cam_pos']
+                input['extrinsic'] = feature['extrinsic']
+                input['cam_pos'] = feature['cam_pos']
             if self.cfg.saved_depth:
-                depth = feature['depth']
-            return image, mask, extrinsic, cam_pos, depth
-
+                input['depth'] = feature['depth']
+            return input

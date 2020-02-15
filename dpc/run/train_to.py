@@ -4,7 +4,7 @@ import startup
 
 import os
 import time
-
+import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from models import model_pc_to as model_pc
@@ -54,12 +54,12 @@ def train():
     dataset_loader = torch.utils.data.DataLoader(dataset,
                                                  batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                  num_workers=4)
-    summary_writer = SummaryWriter(log_dir=train_dir, flush_millis=10000)
+    summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
     global_step = 0
     model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
-    train_data = dataset_loader[0]
+    train_data = next(iter(dataset_loader))
     inputs = model.preprocess(train_data, cfg.step_size)
-    outputs = model(inputs)
+    outputs = model(inputs, global_step, is_training=True, run_projection=True)
 
     # with summary_writer.as_default(), tfsum.record_summaries_every_n_global_steps(10):
     #     global_step = tf.train.get_or_create_global_step()

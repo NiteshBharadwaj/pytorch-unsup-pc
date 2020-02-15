@@ -3,4 +3,4 @@
 data/gt/*
 data/renders/*
 data/tf_records/*
-
+*.0

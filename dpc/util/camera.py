@@ -1,5 +1,4 @@
 import numpy as np
-import tensorflow as tf
 
 
 def intrinsic_matrix(cfg, dims=3, inverse=False):
@@ -39,8 +38,8 @@ def camera_from_blender(their):
 def get_full_camera(cfg, cam, inverted):
     def fix_matrix(extr):
         return camera_from_blender(extr)
-    extr_tf = tf.py_func(fix_matrix, [cam], tf.float32)
-    extr_tf = tf.reshape(extr_tf, shape=[4, 4])
+    extr_tf = fix_matrix(cam)
+    extr_tf = extr_tf.reshape(4,4)
     return extr_tf
 
 

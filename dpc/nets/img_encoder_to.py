@@ -24,7 +24,6 @@ class Encoder(nn.Module):
         image_channels = cfg.input_shape[2]
         act_fun = nn.LeakyReLU()
         num_blocks = int(np.log2(image_size / target_spatial_size) - 1)
-
         conv_layers = []
         conv_layers.append(nn.Conv2d(image_channels, f_dim, (5,5),stride=2, padding=2))
         conv_layers.append(act_fun)
@@ -32,7 +31,7 @@ class Encoder(nn.Module):
             f_dim = f_dim*2
             conv_layers.append(nn.Conv2d(f_dim//2,f_dim,(3,3),stride=2,padding=1))
             conv_layers.append(act_fun)
-            conv_layers.append(nn.Conv2d(f_dim,f_dim,(3,3), stride=1))
+            conv_layers.append(nn.Conv2d(f_dim,f_dim,(3,3), stride=1, padding=1))
             conv_layers.append(act_fun)
         self.conv_layers = nn.Sequential(*conv_layers)
 
