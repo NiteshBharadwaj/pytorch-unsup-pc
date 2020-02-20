@@ -3,7 +3,7 @@ import sys
 from collections import namedtuple
 
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from util.data import tf_record_options
 
@@ -28,7 +28,9 @@ class Dataset3D:
         num_views = cfg.num_views
 
         tfrecords_filename = tf_records_dataset_filename(cfg)
-        options = tf_record_options(cfg)
+        #options = tf_record_options(cfg)
+        print(tfrecords_filename)
+        options=None
         record_iterator = tf.python_io.tf_record_iterator(path=tfrecords_filename, options=options)
 
         data = []

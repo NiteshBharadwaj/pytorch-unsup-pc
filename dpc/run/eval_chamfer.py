@@ -46,20 +46,28 @@ def run_eval():
 
     gt_dir = os.path.join(cfg.gt_pc_dir, cfg.synth_set)
 
-    g = tf.Graph()
-    with g.as_default():
-        source_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
-        target_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
-        quat_tf = tf.placeholder(dtype=tf.float64, shape=[1, 4])
+    source_pc = torch.Tensor(None,3)
+    target_pc = torch.Tensor(None,3)
+    quat_tf = torch.Tensor(1,4)
 
-        _, min_dist, min_idx = point_cloud_distance(source_pc, target_pc)
+    _, min_dist, min_idx = point_cloud_distance( source_pc, target_pc) 
+    source_pc_2 = tf.Tensor(1,None,3)
+    rotated_pc = quaternion_rotate(source_pc_2, quat_tf)
 
-        source_pc_2 = tf.placeholder(dtype=tf.float64, shape=[1, None, 3])
-        rotated_pc = quaternion_rotate(source_pc_2, quat_tf)
+    #g = tf.Graph()
+    #with g.as_default():
+    #    source_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
+    #    target_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
+    #    quat_tf = tf.placeholder(dtype=tf.float64, shape=[1, 4])
 
-        sess = tf.Session(config=config)
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
+    #    _, min_dist, min_idx = point_cloud_distance(source_pc, target_pc)
+
+    #    source_pc_2 = tf.placeholder(dtype=tf.float64, shape=[1, None, 3])
+    #    rotated_pc = quaternion_rotate(source_pc_2, quat_tf)
+
+    #    sess = tf.Session(config=config)
+    #    sess.run(tf.global_variables_initializer())
+    #    sess.run(tf.local_variables_initializer())
 
     save_pred_name = "{}_{}".format(cfg.save_predictions_dir, cfg.eval_split)
     save_dir = os.path.join(exp_dir, cfg.save_predictions_dir)

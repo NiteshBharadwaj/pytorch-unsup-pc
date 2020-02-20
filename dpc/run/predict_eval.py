@@ -18,20 +18,20 @@ def compute_eval():
 
     compute_predictions_pc()
 
-    if cfg.predict_pose and cfg.eval_split == "val":
-        import subprocess
-        import sys
-        # need to use subprocess, because optimal_alignment uses eager execution
-        # and it cannot be mixed with the graph mode within the same process
-        script_dir = os.path.dirname(os.path.realpath(__file__))
-        args = " ".join(sys.argv[1:])
-        cmd = f"python {script_dir}/compute_alignment.py {args}"
-        subprocess.call(cmd, shell=True)
+    #if cfg.predict_pose and cfg.eval_split == "val":
+    #    import subprocess
+    #    import sys
+    #    # need to use subprocess, because optimal_alignment uses eager execution
+    #    # and it cannot be mixed with the graph mode within the same process
+    #    script_dir = os.path.dirname(os.path.realpath(__file__))
+    #    args = " ".join(sys.argv[1:])
+    #    cmd = f"python {script_dir}/compute_alignment.py {args}"
+    #    subprocess.call(cmd, shell=True)
 
-    run_eval()
+    #run_eval()
 
-    if cfg.predict_pose:
-        run_camera_pose_eval()
+    #if cfg.predict_pose:
+    #    run_camera_pose_eval()
 
 
 def main(_):

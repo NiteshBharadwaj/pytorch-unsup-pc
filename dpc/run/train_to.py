@@ -48,19 +48,22 @@ def train():
     split_name = "train"
     dataset_folder = cfg.inp_dir
 
-
     dataset = ShapeRecords(dataset_folder, cfg)
-
-    dataset_loader = torch.utils.data.DataLoader(dataset,
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device=='cuda':
+        dataset_loader = torch.utils.data.DataLoader(dataset,
                                                  batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                  num_workers=4)
+    else:
+        dataset_loader = torch.utils.data.DataLoader(dataset,
+                                                 batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset)
     summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
     global_step = 0
     model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
     train_data = next(iter(dataset_loader))
     inputs = model.preprocess(train_data, cfg.step_size)
     outputs = model(inputs, global_step, is_training=True, run_projection=True)
-
+    print(outputs)
     # with summary_writer.as_default(), tfsum.record_summaries_every_n_global_steps(10):
     #     global_step = tf.train.get_or_create_global_step()
     #     model = model_pc.ModelPointCloud(cfg, global_step)

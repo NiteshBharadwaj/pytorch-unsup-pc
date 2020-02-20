@@ -19,6 +19,7 @@ class ShapeRecords(data.Dataset):
 
     def __getitem__(self, index):
         fname = os.path.join(self.dataset_folder, self.file_names[index])
+        print(fname)
         with open(fname, 'rb') as f:
             input = {}
             feature = pickle.load(f)

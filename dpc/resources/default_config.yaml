@@ -1,9 +1,9 @@
 # Parameters for the config files and command-line arguments.
 # Default values define the type of the parameter.
 
-config: "" # .yaml config file
+config: "/Users/raghavsubramanian/coolnamehere/dpc/resources/default_config.yaml" # .yaml config file
 
-inp_dir: ""  # Directory path containing the input data (tfrecords).
+inp_dir: "/Users/raghavsubramanian/coolnamehere/data/tf_records"  # Directory path containing the input data (tfrecords).
 synth_set: "03001627"  # Class of Shapenet data
 num_views: 5  # Number of viewpoints in the input data.
 num_views_to_use: -1  # Num of views to actually use.

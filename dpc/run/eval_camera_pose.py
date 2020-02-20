@@ -2,25 +2,33 @@ import startup
 
 import os
 
+import torch
 import numpy as np
 import scipy.io
-import tensorflow as tf
-
+#import tensorflow as tf
+import tensorflow.compat.v1 as tf
 from util.simple_dataset import Dataset3D
 from util.app_config import config as app_config
 from util.quaternion import quaternion_multiply, quaternion_conjugate
 from util.camera import quaternion_from_campos
 
+def get_conj(quat_inp):
+    return quaternion_conjugate(quat_inp)
+
+def get_mul(quat_inp,quat_inp_2):
+    return quaternion_multiply(quat_inp,quat_inp_2)
 
 def run_eval():
-    config = tf.ConfigProto(
-        device_count={'GPU': 1}
-    )
+    #config = tf.ConfigProto(
+    #    device_count={'GPU': 1}
+    #)
 
     cfg = app_config
     exp_dir = cfg.checkpoint_dir
     num_views = cfg.num_views
-
+   
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    """
     g = tf.Graph()
     with g.as_default():
         quat_inp = tf.placeholder(dtype=tf.float64, shape=[1, 4])
@@ -32,13 +40,15 @@ def run_eval():
         sess = tf.Session(config=config)
         sess.run(tf.global_variables_initializer())
         sess.run(tf.local_variables_initializer())
-
+    """
     save_pred_name = "{}_{}".format(cfg.save_predictions_dir, cfg.eval_split)
     save_dir = os.path.join(exp_dir, cfg.save_predictions_dir)
-
+    
     reference_rotation = scipy.io.loadmat("{}/final_reference_rotation.mat".format(exp_dir))["rotation"]
-    ref_conj_np = sess.run(quat_conj, feed_dict={quat_inp: reference_rotation})
-
+    #ref_conj_np = sess.run(quat_conj, feed_dict={quat_inp: reference_rotation})
+    
+    ref_conj_np = get_conj(quat_inp)
+    
     dataset = Dataset3D(cfg)
 
     num_models = dataset.num_samples()
@@ -74,8 +84,10 @@ def run_eval():
             q1 = gt_quat_np
             q2 = pred_quat_aligned_np
 
-            q1_conj = sess.run(quat_conj, feed_dict={quat_inp: q1})
-            q_diff = sess.run(quat_mul, feed_dict={quat_inp: q1_conj, quat_inp_2: q2})
+            #q1_conj = sess.run(quat_conj, feed_dict={quat_inp: q1})
+            q1_conj = get_conj(q1)
+            q_diff = get_mul(q1_conj, q2)
+            #sess.run(quat_mul, feed_dict={quat_inp: q1_conj, quat_inp_2: q2})
 
             ang_diff = 2 * np.arccos(q_diff[0, 0])
             if ang_diff > np.pi:
@@ -101,10 +113,10 @@ def run_eval():
     f.write("{} {}\n".format(accuracy, median_error))
     f.close()
 
-
 def main(_):
     run_eval()
 
 
 if __name__ == '__main__':
-    tf.app.run()
+    #tf.app.run()
+    run_eval() 

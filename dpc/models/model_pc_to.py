@@ -24,10 +24,10 @@ from nets.net_factory import get_network
 
 def init_weights(m):
     if type(m) == nn.Linear:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
     if type(m) == nn.Conv2d:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
 
 def tf_repeat_0(input, num):
@@ -111,7 +111,7 @@ class ScalePredictor(nn.Module):  # pylint:disable=invalid-name
     def forward(self,x, is_training):
         x = self.fc(x)
         pred = self.sigmoid(x) * self.cfg.pc_occupancy_scaling_maximum
-        if is_training:
+        if is_training and self.summary_writer:
             self.summary_writer.add_scalar("pc_occupancy_scaling_factor", pred.mean().detach().numpy())
         return pred
 
@@ -126,7 +126,7 @@ class FocalLengthPredictor(nn.Module):
     def forward(self,x,is_training):
         pred = self.fc(x)
         out = self.cfg.focal_length_mean + self.sigmoid(pred)*self.cfg.focal_length_range
-        if is_training:
+        if is_training and self.summary_writer:
             self.summary_writer.add_scalar("meta/focal_length", out.mean().detach().numpy())
         return out
 
@@ -155,7 +155,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
     def setup_sigma(self):
         cfg = self.cfg()
         sigma_rel = get_smooth_sigma(cfg, self._global_step)
-        self.summary_writer.add_scalar("meta/gauss_sigma_rel", sigma_rel)
+        if self.summary_writer:
+            self.summary_writer.add_scalar("meta/gauss_sigma_rel", sigma_rel)
         self._sigma_rel = sigma_rel
         self._gauss_sigma = sigma_rel / cfg.vox_size
         self._gauss_kernel = smoothing_kernel(cfg, sigma_rel)

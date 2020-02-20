@@ -70,8 +70,8 @@ def quaternion_multiply(a, b):
     Returns:
         A `Quaternion`.
     """
-    a = _prepare_tensor_for_div_mul(a)
-    b = _prepare_tensor_for_div_mul(b)
+    #a = _prepare_tensor_for_div_mul(a)
+    #b = _prepare_tensor_for_div_mul(b)
     w1, x1, y1, z1 = torch.unbind(a, dim=-1)
     w2, x2, y2, z2 = torch.unbind(b, dim=-1)
     w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
@@ -83,7 +83,10 @@ def quaternion_multiply(a, b):
 
 def quaternion_conjugate(q):
     """Compute the conjugate of q, i.e. [q.w, -q.x, -q.y, -q.z]."""
-    return torch.multiply(q, [1.0, -1.0, -1.0, -1.0])
+    #rksubram
+    prdt = torch.Tensor([1.0, -1.0, -1.0, -1.0])
+    #return torch.multiply(q, [1.0, -1.0, -1.0, -1.0])
+    return torch.mul(q,prdt)
 
 
 def quaternion_normalise(q):

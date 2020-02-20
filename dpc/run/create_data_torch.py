@@ -97,6 +97,7 @@ def create_record(synth_set, split_name, models):
 #             voxels = np.flip(voxels, axis=1)
 
         im_dir = os.path.join(render_dir, model)
+        print(im_dir)
         images = sorted(glob.glob("{}/render_*.png".format(im_dir)))
 
         rgbs = np.zeros((num_views, im_size, im_size, 3), dtype=np.float32)
@@ -104,7 +105,8 @@ def create_record(synth_set, split_name, models):
         cameras = np.zeros((num_views, 4, 4), dtype=np.float32)
         cam_pos = np.zeros((num_views, 3), dtype=np.float32)
         depths = np.zeros((num_views, im_size, im_size, 1), dtype=np.float32)
-        
+       
+        print(len(images), num_views)
         assert(len(images) >= num_views)
 
         for k in range(num_views):
