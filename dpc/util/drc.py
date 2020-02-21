@@ -1,4 +1,4 @@
-import tensorflow as tf
+import torch
 
 
 """
@@ -36,7 +36,7 @@ def drc_projection2(transformed_voxels):
 """
 
 
-DTYPE = tf.float32
+DTYPE = torch.float64
 
 
 def slice_axis0(t, idx):
@@ -46,30 +46,28 @@ def slice_axis0(t, idx):
 
 def drc_event_probabilities_impl(voxels, cfg):
     # swap batch and Z dimensions for the ease of processing
-    input = tf.transpose(voxels, [1, 0, 2, 3, 4])
+    input = voxels.permute(2, 0, 3, 4, 1)
 
     logsum = cfg.drc_logsum
     dtp = DTYPE
 
     clip_val = cfg.drc_logsum_clip_val
     if logsum:
-        input = tf.clip_by_value(input, clip_val, 1.0-clip_val)
+        input = torch.clamp(input, clip_val, 1.0-clip_val)
 
     def log_unity(shape, dtype):
-        return tf.ones(shape, dtype)*clip_val
+        return torch.ones(tuple(shape), dtype=dtype)*clip_val
 
     y = input
     x = 1.0 - y
     if logsum:
-        y = tf.log(y)
-        x = tf.log(x)
-        op_fn = tf.add
+        y = torch.log(y)
+        x = torch.log(x)
+        op_fn = torch.add
         unity_fn = log_unity
-        cum_fun = tf.cumsum
     else:
-        op_fn = tf.multiply
-        unity_fn = tf.ones
-        cum_fun = tf.cumprod
+        op_fn = torch.multiply
+        unity_fn = torch.ones
 
     v_shape = input.shape
     singleton_shape = [1, v_shape[1], v_shape[2], v_shape[3], v_shape[4]]
@@ -77,7 +75,10 @@ def drc_event_probabilities_impl(voxels, cfg):
     # this part computes tensor of the form,
     # ex. for vox_size=3 [1, x1, x1*x2, x1*x2*x3]
     if cfg.drc_tf_cumulative:
-        r = cum_fun(x, axis=0)
+        if logsum:
+            r = x.sum(0, keepdim=True)
+        else:
+            r = x.product(0, keepdim=True)
     else:
         depth = input.shape[0]
         collection = []
@@ -87,17 +88,18 @@ def drc_event_probabilities_impl(voxels, cfg):
                 prev = collection[-1]
                 current = op_fn(current, prev)
             collection.append(current)
-        r = tf.concat(collection, axis=0)
+        r = torch.cat(collection, dim=0)
 
+    r = r.repeat(input.shape[0],1,1,1,1)
     r1 = unity_fn(singleton_shape, dtype=dtp)
-    p1 = tf.concat([r1, r], axis=0)  # [1, x1, x1*x2, x1*x2*x3]
+    p1 = torch.cat([r1, r], dim=0)  # [1, x1, x1*x2, x1*x2*x3]
 
     r2 = unity_fn(singleton_shape, dtype=dtp)
-    p2 = tf.concat([y, r2], axis=0)  # [(1-x1), (1-x2), (1-x3), 1])
+    p2 = torch.cat([y, r2], dim=0)  # [(1-x1), (1-x2), (1-x3), 1])
 
     p = op_fn(p1, p2)  # [(1-x1), x1*(1-x2), x1*x2*(1-x3), x1*x2*x3]
     if logsum:
-        p = tf.exp(p)
+        p = torch.exp(p)
 
     return p, singleton_shape, input
 
@@ -108,17 +110,18 @@ def drc_event_probabilities(voxels, cfg):
 
 
 def drc_projection(voxels, cfg):
+    # TODO:
     p, singleton_shape, input = drc_event_probabilities_impl(voxels, cfg)
     dtp = DTYPE
 
     # colors per voxel (will be predicted later)
     # for silhouettes simply: [1, 1, 1, 0]
-    c0 = tf.ones_like(input, dtype=dtp)
-    c1 = tf.zeros(singleton_shape, dtype=dtp)
-    c = tf.concat([c0, c1], axis=0)
+    c0 = torch.ones(input.shape, dtype=dtp)
+    c1 = torch.zeros(tuple(singleton_shape), dtype=dtp)
+    c = torch.cat([c0, c1], axis=0)
 
     # \sum_{i=1:vox_size} {p_i * c_i}
-    out = tf.reduce_sum(p * c, [0])
+    out = torch.sum(p * c, 0)
 
     return out, p
 
@@ -135,19 +138,19 @@ def project_volume_rgb_integral(cfg, p, rgb):
 
     return out
 
-
+import numpy as np
 def drc_depth_grid(cfg, z_size):
-    i_s = tf.range(0, z_size, 1, dtype=DTYPE)
+    i_s = torch.arange(0, z_size, 1, dtype=DTYPE)
     di_s = i_s / z_size - 0.5 + cfg.camera_distance
-    last = tf.constant(cfg.max_depth, shape=[1,])
-    return tf.concat([di_s, last], axis=0)
+    last = torch.from_numpy(np.array([cfg.max_depth]))
+    return torch.cat([di_s, last], dim=0)
 
 
 def drc_depth_projection(p, cfg):
     z_size = p.shape[0]
-    z_size = tf.cast(z_size, dtype=tf.float32) - 1  # because p is already of size vox_size + 1
+    z_size = z_size- 1  # because p is already of size vox_size + 1
     depth_grid = drc_depth_grid(cfg, z_size)
-    psi = tf.reshape(depth_grid, shape=[-1, 1, 1, 1, 1])
+    psi = depth_grid.reshape(-1, 1, 1, 1, 1)
     # \sum_{i=1:vox_size} {p_i * psi_i}
-    out = tf.reduce_sum(p * psi, [0])
+    out = torch.sum(p * psi, 0)
     return out

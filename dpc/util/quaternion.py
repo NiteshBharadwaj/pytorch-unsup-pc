@@ -42,10 +42,11 @@ def vector3d_to_quaternion(x):
     Raises:
         ValueError, if the last dimension of x is not 3.
     """
-    x = torch.from_numpy(x)
+    #x = torch.from_numpy(x)
     if x.shape[-1] != 3:
         raise ValueError("The last dimension of x must be 3.")
-    return F.pad(x, (len(x.shape) - 1) * [[0, 0]] + [[1, 0]])
+    padding = (1,0)
+    return F.pad(x, padding)
 
 
 def _prepare_tensor_for_div_mul(x):
@@ -55,7 +56,7 @@ def _prepare_tensor_for_div_mul(x):
     b) prepends a 0 in the last dimension if the last dimension is 3,
     c) validates the type and shape.
     """
-    x = torch.from_numpy(x)
+    #x = torch.from_numpy(x)
     if x.shape[-1] == 3:
         x = vector3d_to_quaternion(x)
     validate_shape(x)
@@ -78,12 +79,14 @@ def quaternion_multiply(a, b):
     x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
     y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
     z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
-    return torch.stack((w, x, y, z), dim=-1)
+    stacked = torch.stack((w, x, y, z), dim=-1)
+    return stacked
 
 
 def quaternion_conjugate(q):
     """Compute the conjugate of q, i.e. [q.w, -q.x, -q.y, -q.z]."""
-    return torch.multiply(q, [1.0, -1.0, -1.0, -1.0])
+    conj_array = torch.from_numpy(np.array([1.0, -1.0, -1.0, -1.0]))
+    return q * conj_array
 
 
 def quaternion_normalise(q):
@@ -105,9 +108,10 @@ def quaternion_rotate(pc, q, inverse=False):
     Returns:
         q * pc * q'
     """
-    q_norm = torch.expand(torch.norm(q, axis=-1), axis=-1)
-    q /= q_norm
-    q = torch.expand(q, axis=1)  # [B,1,4]
+    q_norm = q.norm(p=2,dim=-1).reshape(q.shape[0],1)
+    # TODO: Detach or not, the denominatior
+    q = torch.div(q,q_norm)
+    q = q.reshape(q.shape[0],1,q.shape[1])  # [B,1,4]
     q_ = quaternion_conjugate(q)
     qmul = quaternion_multiply
     if not inverse:

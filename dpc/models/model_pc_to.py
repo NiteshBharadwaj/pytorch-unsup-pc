@@ -11,7 +11,8 @@ from models.model_base_to import ModelBase, pool_single_view
 
 # from util.losses import add_drc_loss, add_proj_rgb_loss, add_proj_depth_loss
 # from util.point_cloud import pointcloud_project, pointcloud_project_fast, \
-#     pc_point_dropout
+
+from util.point_cloud_to import  pc_point_dropout, pointcloud_project_fast
 #from util.gauss_kernel import gauss_smoothen_image, smoothing_kernel
 from util.gauss_kernel import smoothing_kernel
 from util.quaternion import \
@@ -49,30 +50,31 @@ def get_smooth_sigma(cfg, global_step):
     diff = (cfg.pc_relative_sigma_end - cfg.pc_relative_sigma)
     sigma_rel = cfg.pc_relative_sigma + global_step / num_steps * diff
     return sigma_rel
-#
-#
-# def get_dropout_prob(cfg, global_step):
-#     if not cfg.pc_point_dropout_scheduled:
-#         return cfg.pc_point_dropout
-#
-#     exp_schedule = cfg.pc_point_dropout_exponential_schedule
-#     num_steps = cfg.max_number_of_steps
-#     keep_prob_start = cfg.pc_point_dropout
-#     keep_prob_end = 1.0
-#     start_step = cfg.pc_point_dropout_start_step
-#     end_step = cfg.pc_point_dropout_end_step
-#     x = global_step / num_steps
-#     k = (keep_prob_end - keep_prob_start) / (end_step - start_step)
-#     b = keep_prob_start - k * start_step
-#     if exp_schedule:
-#         alpha = torch.log(keep_prob_end / keep_prob_start)
-#         keep_prob = keep_prob_start * torch.exp(alpha * x)
-#     else:
-#         keep_prob = k * x + b
-#     keep_prob = tf.clip_by_value(keep_prob, keep_prob_start, keep_prob_end)
-#     keep_prob = tf.reshape(keep_prob, [])
-#     return tf.cast(keep_prob, tf.float32)
-#
+
+def clamp(num, min_value, max_value):
+   return max(min(num, max_value), min_value)
+
+def get_dropout_prob(cfg, global_step):
+    if not cfg.pc_point_dropout_scheduled:
+        return cfg.pc_point_dropout
+
+    exp_schedule = cfg.pc_point_dropout_exponential_schedule
+    num_steps = cfg.max_number_of_steps
+    keep_prob_start = cfg.pc_point_dropout
+    keep_prob_end = 1.0
+    start_step = cfg.pc_point_dropout_start_step
+    end_step = cfg.pc_point_dropout_end_step
+    x = global_step / num_steps
+    k = (keep_prob_end - keep_prob_start) / (end_step - start_step)
+    b = keep_prob_start - k * start_step
+    if exp_schedule:
+        alpha = torch.log(keep_prob_end / keep_prob_start)
+        keep_prob = keep_prob_start * torch.exp(alpha * x)
+    else:
+        keep_prob = k * x + b
+    keep_prob = clamp(keep_prob, keep_prob_start, keep_prob_end)
+    return keep_prob
+
 #
 # def get_st_global_scale(cfg, global_step):
 #     num_steps = cfg.max_number_of_steps
@@ -212,50 +214,50 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         return outputs
 
-    # def get_dropout_keep_prob(self):
-    #     cfg = self.cfg()
-    #     return get_dropout_prob(cfg, self._global_step)
+    def get_dropout_keep_prob(self):
+        cfg = self.cfg()
+        return get_dropout_prob(cfg, self._global_step)
 
-    # def compute_projection(self, inputs, outputs, is_training):
-    #     cfg = self.cfg()
-    #     all_points = outputs['all_points']
-    #     all_rgb = outputs['all_rgb']
-    #
-    #     if cfg.predict_pose:
-    #         camera_pose = outputs['poses']
-    #     else:
-    #         if cfg.pose_quaternion:
-    #             camera_pose = inputs['camera_quaternion']
-    #         else:
-    #             camera_pose = inputs['matrices']
-    #
-    #     if is_training and cfg.pc_point_dropout != 1:
-    #         dropout_prob = self.get_dropout_keep_prob()
-    #         if is_training:
-    #             tf.contrib.summary.scalar("meta/pc_point_dropout_prob", dropout_prob)
-    #         all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
-    #
-    #     if cfg.pc_fast:
-    #         predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
-    #         proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
-    #                                            all_rgb, self.gauss_kernel(),
-    #                                            scaling_factor=outputs['all_scaling_factors'],
-    #                                            focal_length=outputs['all_focal_length'])
-    #         proj = proj_out["proj"]
-    #         outputs["projs_rgb"] = proj_out["proj_rgb"]
-    #         outputs["drc_probs"] = proj_out["drc_probs"]
-    #         outputs["projs_depth"] = proj_out["proj_depth"]
-    #     else:
-    #         proj, voxels = pointcloud_project(cfg, all_points, camera_pose, self.gauss_sigma())
-    #         outputs["projs_rgb"] = None
-    #         outputs["projs_depth"] = None
-    #
-    #     outputs['projs'] = proj
-    #
-    #     batch_size = outputs['points_1'].shape[0]
-    #     outputs['projs_1'] = proj[0:batch_size, :, :, :]
-    #
-    #     return outputs
+    def compute_projection(self, inputs, outputs, is_training, summary_writer):
+        cfg = self.cfg()
+        all_points = outputs['all_points']
+        all_rgb = outputs['all_rgb']
+
+        if cfg.predict_pose:
+            camera_pose = outputs['poses']
+        else:
+            if cfg.pose_quaternion:
+                camera_pose = inputs['camera_quaternion']
+            else:
+                camera_pose = inputs['matrices']
+
+        if is_training and cfg.pc_point_dropout != 1:
+            dropout_prob = self.get_dropout_keep_prob()
+            if is_training and summary_writer is not None:
+                summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob)
+            all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
+
+        if cfg.pc_fast:
+            predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
+            proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
+                                               all_rgb, self.gauss_kernel(),
+                                               scaling_factor=outputs['all_scaling_factors'],
+                                               focal_length=outputs['all_focal_length'])
+            proj = proj_out["proj"]
+            outputs["projs_rgb"] = proj_out["proj_rgb"]
+            outputs["drc_probs"] = proj_out["drc_probs"]
+            outputs["projs_depth"] = proj_out["proj_depth"]
+        else:
+            proj, voxels = pointcloud_project(cfg, all_points, camera_pose, self.gauss_sigma())
+            outputs["projs_rgb"] = None
+            outputs["projs_depth"] = None
+
+        outputs['projs'] = proj
+
+        batch_size = outputs['points_1'].shape[0]
+        outputs['projs_1'] = proj[0:batch_size, :, :, :]
+
+        return outputs
 
     def replicate_for_multiview(self, tensor):
         cfg = self.cfg()
@@ -298,11 +300,13 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             outputs['all_scaling_factors'] = all_scaling_factors
             if cfg.pc_rgb:
                 all_rgb = self.replicate_for_multiview(outputs['rgb_1'])
+                if num_candidates > 1:
+                    all_rgb = tf_repeat_0(all_rgb, num_candidates)
             else:
                 all_rgb = None
             outputs['all_rgb'] = all_rgb
 
-            #outputs = self.compute_projection(inputs, outputs, is_training)
+            outputs = self.compute_projection(inputs, outputs, is_training, self.summary_writer)
 
         return outputs
     #
