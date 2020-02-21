@@ -128,13 +128,13 @@ def drc_projection(voxels, cfg):
 
 def project_volume_rgb_integral(cfg, p, rgb):
     # swap batch and z
-    rgb = tf.transpose(rgb, [1, 0, 2, 3, 4])
+    rgb = rgb.permute(2, 0, 3, 4, 1)
     v_shape = rgb.shape
     singleton_shape = [1, v_shape[1], v_shape[2], v_shape[3], v_shape[4]]
-    background = tf.ones(shape=singleton_shape, dtype=tf.float32)
-    rgb_full = tf.concat([rgb, background], axis=0)
+    background = torch.ones(shape=tuple(singleton_shape), dtype=torch.float63)
+    rgb_full = torch.concat([rgb, background], axis=0)
 
-    out = tf.reduce_sum(p * rgb_full, [0])
+    out = torch.sum(p * rgb_full, 0)
 
     return out
 
