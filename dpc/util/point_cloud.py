@@ -169,11 +169,11 @@ def pc_perspective_transform(cfg, point_cloud,
     if focal_length is None:
         focal_length = cfg.focal_length
     else:
-        focal_length = tf.expand_dims(focal_length, axis=-1)
+        focal_length = focal_length.reshape(focal_length.shape[0], focal_length.shape[1], 1) 
 
     if cfg.pose_quaternion:
         pc2 = quaternion_rotate(point_cloud, transform)
-
+        
         if predicted_translation is not None:
             predicted_translation = tf.expand_dims(predicted_translation, axis=1)
             pc2 += predicted_translation

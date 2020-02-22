@@ -9,10 +9,10 @@ from nets.pose_net_to import PoseNet
 
 from models.model_base_to import ModelBase, pool_single_view
 
-# from util.losses import add_drc_loss, add_proj_rgb_loss, add_proj_depth_loss
-# from util.point_cloud import pointcloud_project, pointcloud_project_fast, \
-#     pc_point_dropout
-#from util.gauss_kernel import gauss_smoothen_image, smoothing_kernel
+from util.losses import add_drc_loss, add_proj_rgb_loss, add_proj_depth_loss
+from util.point_cloud import pointcloud_project, pointcloud_project_fast, \
+     pc_point_dropout
+from util.gauss_kernel import gauss_smoothen_image, smoothing_kernel
 from util.gauss_kernel import smoothing_kernel
 from util.quaternion import \
     quaternion_multiply as q_mul,\
@@ -213,50 +213,50 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         return outputs
 
-    # def get_dropout_keep_prob(self):
-    #     cfg = self.cfg()
-    #     return get_dropout_prob(cfg, self._global_step)
+    def get_dropout_keep_prob(self):
+        cfg = self.cfg()
+        return get_dropout_prob(cfg, self._global_step)
 
-    # def compute_projection(self, inputs, outputs, is_training):
-    #     cfg = self.cfg()
-    #     all_points = outputs['all_points']
-    #     all_rgb = outputs['all_rgb']
-    #
-    #     if cfg.predict_pose:
-    #         camera_pose = outputs['poses']
-    #     else:
-    #         if cfg.pose_quaternion:
-    #             camera_pose = inputs['camera_quaternion']
-    #         else:
-    #             camera_pose = inputs['matrices']
-    #
-    #     if is_training and cfg.pc_point_dropout != 1:
-    #         dropout_prob = self.get_dropout_keep_prob()
-    #         if is_training:
-    #             tf.contrib.summary.scalar("meta/pc_point_dropout_prob", dropout_prob)
-    #         all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
-    #
-    #     if cfg.pc_fast:
-    #         predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
-    #         proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
-    #                                            all_rgb, self.gauss_kernel(),
-    #                                            scaling_factor=outputs['all_scaling_factors'],
-    #                                            focal_length=outputs['all_focal_length'])
-    #         proj = proj_out["proj"]
-    #         outputs["projs_rgb"] = proj_out["proj_rgb"]
-    #         outputs["drc_probs"] = proj_out["drc_probs"]
-    #         outputs["projs_depth"] = proj_out["proj_depth"]
-    #     else:
-    #         proj, voxels = pointcloud_project(cfg, all_points, camera_pose, self.gauss_sigma())
-    #         outputs["projs_rgb"] = None
-    #         outputs["projs_depth"] = None
-    #
-    #     outputs['projs'] = proj
-    #
-    #     batch_size = outputs['points_1'].shape[0]
-    #     outputs['projs_1'] = proj[0:batch_size, :, :, :]
-    #
-    #     return outputs
+    def compute_projection(self, inputs, outputs, is_training):
+        cfg = self.cfg()
+        all_points = outputs['all_points']
+        all_rgb = outputs['all_rgb']
+    
+        if cfg.predict_pose:
+            camera_pose = outputs['poses']
+        else:
+            if cfg.pose_quaternion:
+                camera_pose = inputs['camera_quaternion']
+            else:
+                camera_pose = inputs['matrices']
+    
+        if is_training and cfg.pc_point_dropout != 1:
+            dropout_prob = self.get_dropout_keep_prob()
+            if is_training:
+                self.summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob)
+            all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
+    
+        if cfg.pc_fast:
+            predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
+            proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
+                                               all_rgb, self.gauss_kernel(),
+                                               scaling_factor=outputs['all_scaling_factors'],
+                                               focal_length=outputs['all_focal_length'])
+            proj = proj_out["proj"]
+            outputs["projs_rgb"] = proj_out["proj_rgb"]
+            outputs["drc_probs"] = proj_out["drc_probs"]
+            outputs["projs_depth"] = proj_out["proj_depth"]
+        else:
+            proj, voxels = pointcloud_project(cfg, all_points, camera_pose, self.gauss_sigma())
+            outputs["projs_rgb"] = None
+            outputs["projs_depth"] = None
+    
+        outputs['projs'] = proj
+    
+        batch_size = outputs['points_1'].shape[0]
+        outputs['projs_1'] = proj[0:batch_size, :, :, :]
+    
+        return outputs
 
     def replicate_for_multiview(self, tensor):
         cfg = self.cfg()
@@ -303,7 +303,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
                 all_rgb = None
             outputs['all_rgb'] = all_rgb
 
-            #outputs = self.compute_projection(inputs, outputs, is_training)
+            outputs = self.compute_projection(inputs, outputs, is_training)
 
         return outputs
     #

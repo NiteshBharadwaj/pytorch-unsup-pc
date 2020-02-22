@@ -6,11 +6,12 @@ import numpy as np
 import imageio
 import scipy.io
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 #import tensorflow.contrib.slim as slim
 import torch 
 from models import model_pc_to
 
+from run.ShapeRecords import ShapeRecords
 from util.common import parse_lines
 from util.app_config import config as app_config
 from util.system import setup_environment
@@ -20,31 +21,21 @@ from util.camera import get_full_camera, quaternion_from_campos
 from util.visualise import vis_pc, merge_grid, mask4vis
 from util.point_cloud import pointcloud2voxels, smoothen_voxels3d, pointcloud2voxels3d_fast, pointcloud_project_fast
 from util.quaternion import as_rotation_matrix, quaternion_rotate
-
 #adding tensorboard
 from torch.utils.tensorboard import SummaryWriter
 
-def build_model(model):
+def build_model(model,input,global_step):
     cfg = model.cfg()
     batch_size = cfg.batch_size
-    inputs = torch.Tensor([batch_size, cfg.image_size, cfg.image_size, 3])
-    camera_extr_src = torch.Tensor([4,4])
     #inputs = tf.placeholder(dtype=tf.float32, shape=[batch_size, cfg.image_size, cfg.image_size, 3])
     #camera_extr_src = tf.placeholder(dtype=tf.float32, shape=[4, 4])
 
-    cam_matrix = get_full_camera(cfg, camera_extr_src, inverted=False)
-    torch.reshape(cam_matrix, shape=[batch_size, 4, 4])
-    cam_quaternion = torch.Tensor(shape=[batch_size, 4], dtype=tf.float32)
     #cam_matrix = tf.reshape(cam_matrix, shape=[batch_size, 4, 4])
     #cam_quaternion = tf.placeholder(dtype=tf.float32, shape=[batch_size, 4])
-
-    #model_fn = model.get_model_fn(is_training=False, reuse=False)
-    model_fn = model.forward(is_training=False, reuse=False)
-    code = 'images' if cfg.predict_pose else 'images_1'
-    input = {code: inputs,
-             'matrices': cam_matrix,
-             'camera_quaternion': cam_quaternion}
-    outputs = model_fn(input)
+    writer = SummaryWriter()
+    model =  model_pc_to.ModelPointCloud(cfg, writer)
+    outputs = model(input,0)
+    print(outputs.keys())
     cam_transform = outputs['poses'] if cfg.predict_pose else tf.no_op()
     outputs["inputs"] = inputs
     outputs["camera_extr_src"] = camera_extr_src
@@ -105,7 +96,7 @@ def compute_predictions():
 
     cfg.batch_size = 1
     cfg.step_size = 1
-
+    
     pc_num_points = cfg.pc_num_points
     vox_size = cfg.vox_size
     save_pred = cfg.save_predictions
@@ -117,8 +108,7 @@ def compute_predictions():
     #model
     writer = SummaryWriter()
     model = model_pc_to.ModelPointCloud(cfg,writer)
-    #out = model.forward(inputs,0)
-    
+    #out = build_model(model_fn)
     """
     g = tf.Graph()
     with g.as_default():
@@ -163,12 +153,12 @@ def compute_predictions():
         sess.run(tf.local_variables_initializer())
 
         #variables_to_restore = slim.get_variables_to_restore(exclude=["meta"])
-
     restorer = tf.train.Saver(variables_to_restore)
     checkpoint_file = tf.train.latest_checkpoint(exp_dir)
     print("restoring checkpoint", checkpoint_file)
     restorer.restore(sess, checkpoint_file)
     """
+    
     save_dir = os.path.join(exp_dir, '{}_vis_proj'.format(cfg.save_predictions_dir))
     mkdir_if_missing(save_dir)
     save_pred_dir = os.path.join(exp_dir, cfg.save_predictions_dir)
@@ -176,37 +166,37 @@ def compute_predictions():
 
     vis_size = cfg.vis_size
 
-    dataset = Dataset3D(cfg)
+    dataset_folder = cfg.inp_dir
+    dataset = ShapeRecords(dataset_folder, cfg)
 
     pose_num_candidates = cfg.pose_predict_num_candidates
     num_views = cfg.num_views
     plot_h = 4
     plot_w = 6
     num_views = int(min(num_views, plot_h * plot_w / 2))
-
+    
     if cfg.models_list:
         model_names = parse_lines(cfg.models_list)
     else:
-        model_names = [sample.name for sample in dataset.data]
+        model_names = dataset.file_names
 
     num_models = len(model_names)
-    """
     for k in range(num_models):
         model_name = model_names[k]
-        sample = dataset.sample_by_name(model_name)
+        sample = dataset.__getitem__(k)
 
-        images = sample.image
-        masks = sample.mask
+        images = sample['image']
+        masks = sample['mask']
+       
         if cfg.saved_camera:
-            cameras = sample.camera
-            cam_pos = sample.cam_pos
+            cameras = sample['extrinsic']
+            cam_pos = sample['cam_pos']
         if cfg.vis_depth_projs:
-            depths = sample.depth
+            depths = sample['depth']
         if cfg.variable_num_views:
-            num_views = sample.num_views
+            num_views = sample['num_views']
 
         print("{}/{} {}".format(k, num_models, model_name))
-
         if pose_num_candidates == 1:
             grid = np.empty((plot_h, plot_w), dtype=object)
         else:
@@ -236,15 +226,23 @@ def compute_predictions():
             elif cfg.vis_depth_projs:
                 proj_tensor = projs_depth
             else:
-                proj_tensor = projs
-            (pc_np, rgb_np, proj_np, cam_transf_np, z_latent_np) = sess.run([point_cloud, rgb, proj_tensor, cam_transform, z_latent],
-                                                               feed_dict={input_image: input_image_np,
-                                                                          cam_matrix: extr_mtr,
-                                                                          cam_quaternion: cam_quaternion_np})
-
+                #proj_tensor = projs
+                code = 'images' if cfg.predict_pose else 'images_1'
+                input_image = torch.from_numpy(input_image_np)
+                extr_mtr = torch.from_numpy(extr_mtr)
+                cam_quaternion = torch.from_numpy(cam_quaternion_np)
+                input = {code: input_image, 'matrices': extr_mtr, 'camera_quaternion': cam_quaternion}
+                print(input_image.size())
+                print(extr_mtr.size())
+                print(cam_quaternion.size())
+                out = build_model(model,input,0)
+                #print(out.keys())
+                #'conv_features', 'ids', 'z_latent', 'ids_1', 'points_1', 'rgb_1', 'scaling_factor', 'focal_length', 'all_focal_length', 'all_points', 'all_scaling_factors', 'all_rgb']
+                break
+            #(pc_np, rgb_np, proj_np, cam_transf_np, z_latent_np) = sess.run([point_cloud, rgb, proj_tensor, cam_transform, z_latent],
             if pose_student:
-                (proj_student_np, camera_student_np) = sess.run([proj_student, camera_pose_student],
-                                                                feed_dict={input_image: input_image_np})
+             #   (proj_student_np, camera_student_np) = sess.run([proj_student, camera_pose_student],
+                                                                #feed_dict={input_image: input_image_np})
                 predicted_camera = camera_student_np
             else:
                 predicted_camera = cam_transf_np
@@ -351,12 +349,8 @@ def compute_predictions():
 
             if save_voxels:
                 np.savez("{}/{}_vox".format(save_pred_dir, sample.name), all_voxels)
-
-    sess.close()
-    """
-
-def main(_):
-    compute_predictions()
+    #sess.close()
+#def main(_):
 
 
 if __name__ == '__main__':

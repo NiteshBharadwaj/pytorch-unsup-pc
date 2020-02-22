@@ -13,13 +13,13 @@ class ShapeRecords(data.Dataset):
         for filename in os.listdir(dataset_folder):
             if filename.endswith(".p"):
                 self.file_names.append(filename)
+        self.data = dict()
 
     def __len__(self):
         return len(self.file_names)
 
     def __getitem__(self, index):
         fname = os.path.join(self.dataset_folder, self.file_names[index])
-        print(fname)
         with open(fname, 'rb') as f:
             input = {}
             feature = pickle.load(f)
@@ -30,4 +30,7 @@ class ShapeRecords(data.Dataset):
                 input['cam_pos'] = feature['cam_pos']
             if self.cfg.saved_depth:
                 input['depth'] = feature['depth']
+            if self.cfg.variable_num_views:
+                input['num_views'] = feature['num_views']
             return input
+

@@ -16,6 +16,7 @@
 # Website: https://github.com/PhilJd/tf-quaternion
 
 import torch
+import torch.nn
 import numpy as np
 import torch.nn.functional as F
 
@@ -23,13 +24,13 @@ import torch.nn.functional as F
 # TODO: Fix functions in this file. This path is not being taken in default train config. None of these functions are being called except last numpy function
 
 def validate_shape(x):
-    """Raise a value error if x.shape ist not (..., 4)."""
+    """Raise a value error if x.size() ist not (..., 4)."""
     error_msg = ("Can't create a quaternion from a tensor with shape {}."
                  "The last dimension must be 4.")
     # Check is performed during graph construction. If your dimension
     # is unknown, tf.reshape(x, (-1, 4)) might work.
-    if x.shape[-1] != 4:
-        raise ValueError(error_msg.format(x.shape))
+    if x.size()[-1] != 4:
+        raise ValueError(error_msg.format(x.size()))
 
 
 def vector3d_to_quaternion(x):
@@ -42,11 +43,15 @@ def vector3d_to_quaternion(x):
     Raises:
         ValueError, if the last dimension of x is not 3.
     """
-    x = torch.from_numpy(x)
-    if x.shape[-1] != 3:
+    if "torch" not in str(x.type()):
+        x = torch.from_numpy(x)
+    print(x.size())
+    if x.size()[-1] != 3:
         raise ValueError("The last dimension of x must be 3.")
-    return F.pad(x, (len(x.shape) - 1) * [[0, 0]] + [[1, 0]])
-
+    m = torch.nn.ConstantPad3d((1,0,0,0,0,0),0)
+    return m(x)
+#F.pad(x, (len(x.size()) - 1) * [[0, 0]] + [[1, 0]])
+#    return x.unsqueeze(-1)
 
 def _prepare_tensor_for_div_mul(x):
     """Prepare the tensor x for division/multiplication.
@@ -55,9 +60,11 @@ def _prepare_tensor_for_div_mul(x):
     b) prepends a 0 in the last dimension if the last dimension is 3,
     c) validates the type and shape.
     """
-    x = torch.from_numpy(x)
-    if x.shape[-1] == 3:
-        x = vector3d_to_quaternion(x)
+    if "torch" not in str(x.type()):
+        x = torch.from_numpy(x)
+
+    if x.size()[-1] == 3:
+            x = vector3d_to_quaternion(x)
     validate_shape(x)
     return x
 
@@ -70,10 +77,11 @@ def quaternion_multiply(a, b):
     Returns:
         A `Quaternion`.
     """
-    #a = _prepare_tensor_for_div_mul(a)
-    #b = _prepare_tensor_for_div_mul(b)
-    w1, x1, y1, z1 = torch.unbind(a, dim=-1)
-    w2, x2, y2, z2 = torch.unbind(b, dim=-1)
+    a = _prepare_tensor_for_div_mul(a)
+    b = _prepare_tensor_for_div_mul(b)
+    w1, x1, y1, z1 = torch.unbind(torch.squeeze(a))
+    print(b.size())
+    w2, x2, y2, z2 = torch.unbind(torch.squeeze(b))
     w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
     x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
     y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
@@ -96,7 +104,7 @@ def quaternion_normalise(q):
     Returns:
         q / ||q||_2
     """
-    return q / torch.norm(q, axis=-1, keepdims=True)
+    return q / torch.norm(q, p=2, dim = -1, keepdims=True)
 
 
 def quaternion_rotate(pc, q, inverse=False):
@@ -108,16 +116,18 @@ def quaternion_rotate(pc, q, inverse=False):
     Returns:
         q * pc * q'
     """
-    q_norm = torch.expand(torch.norm(q, axis=-1), axis=-1)
-    q /= q_norm
-    q = torch.expand(q, axis=1)  # [B,1,4]
+    q_norm = q.norm(p=2,dim=-1).reshape(q.size()[0],1)
+    q = torch.div(q,q_norm)
+    q = q.reshape(q.size()[0],1,q.size()[1])  # [B,1,4]
     q_ = quaternion_conjugate(q)
     qmul = quaternion_multiply
     if not inverse:
         wxyz = qmul(qmul(q, pc), q_)  # [B,N,4]
+        print(wxyz)
     else:
         wxyz = qmul(qmul(q_, pc), q)  # [B,N,4]
-    if len(wxyz.shape) == 2: # bug with batch size of 1
+    print("WXYZ:",wxyz.size())
+    if len(wxyz.size()) == 2: # bug with batch size of 1
         wxyz = torch.expand_dims(wxyz, axis=0)
     xyz = wxyz[:, :, 1:4]  # [B,N,3]
     return xyz
@@ -163,7 +173,7 @@ def from_rotation_matrix(mtr):
     """
     mtr = tf.convert_to_tensor(mtr)
     def m(j, i):
-        shape = mtr.shape.as_list()
+        shape = mtr.size().as_list()
         begin = [0 for _ in range(len(shape))]
         begin[-2] = j
         begin[-1] = i
