@@ -11,17 +11,17 @@ def gauss_kernel_1d(l, sig):
     return kernel / kernel.sum()
 
 
-# def gauss_smoothen_image(cfg, img, sigma_rel):
-#     fsz = cfg.pc_gauss_kernel_size
-#     kernel = gauss_kernel_1d(fsz, sigma_rel)
-#     in_channels = img.shape[-1]
-#     k1 = torch.repeat(kernel.reshape(1, fsz, 1, 1), (1, 1, in_channels, 1))
-#     k2 = torch.repeat(kernel.reshape((fsz, 1, 1, 1)), (1, 1, in_channels, 1))
-#
-#     img_tmp = img
-#     img_tmp = tf.nn.depthwise_conv2d(img_tmp, k1, [1, 1, 1, 1], padding="SAME")
-#     img_tmp = tf.nn.depthwise_conv2d(img_tmp, k2, [1, 1, 1, 1], padding="SAME")
-#     return img_tmp
+def gauss_smoothen_image(cfg, img, sigma_rel):
+    fsz = cfg.pc_gauss_kernel_size
+    kernel = gauss_kernel_1d(fsz, sigma_rel)
+    in_channels = img.shape[-1]
+    k1 = torch.repeat(kernel.reshape(1, fsz, 1, 1), (1, 1, in_channels, 1))
+    k2 = torch.repeat(kernel.reshape((fsz, 1, 1, 1)), (1, 1, in_channels, 1))
+
+    img_tmp = img
+    img_tmp = tf.nn.depthwise_conv2d(img_tmp, k1, [1, 1, 1, 1], padding="SAME")
+    img_tmp = tf.nn.depthwise_conv2d(img_tmp, k2, [1, 1, 1, 1], padding="SAME")
+    return img_tmp
 
 
 def separable_kernels(kernel):

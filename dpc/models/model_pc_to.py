@@ -23,6 +23,15 @@ from util.quaternion import \
 
 from nets.net_factory import get_network
 
+def one_hot(y,num):
+    batch_size = y.shape[0]
+    y_onehot = torch.FloatTensor(batch_size,num)
+
+    # In your for loop
+    y_onehot.zero_()
+    y_onehot.scatter_(1, y.reshape(-1,1), 1)
+    return y_onehot
+
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform(m.weight)
@@ -309,142 +318,151 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             outputs = self.compute_projection(inputs, outputs, is_training, self.summary_writer)
 
         return outputs
-    #
-    # def proj_loss_pose_candidates(self, gt, pred, inputs):
-    #     """
-    #     :param gt: [BATCH*VIEWS, IM_SIZE, IM_SIZE, 1]
-    #     :param pred: [BATCH*VIEWS*CANDIDATES, IM_SIZE, IM_SIZE, 1]
-    #     :return: [], [BATCH*VIEWS]
-    #     """
-    #     cfg = self.cfg()
-    #     num_candidates = cfg.pose_predict_num_candidates
-    #     gt = tf_repeat_0(gt, num_candidates) # [BATCH*VIEWS*CANDIDATES, IM_SIZE, IM_SIZE, 1]
-    #     sq_diff = tf.square(gt - pred)
-    #     all_loss = tf.reduce_sum(sq_diff, [1, 2, 3]) # [BATCH*VIEWS*CANDIDATES]
-    #     all_loss = tf.reshape(all_loss, [-1, num_candidates]) # [BATCH*VIEWS, CANDIDATES]
-    #     min_loss = tf.argmin(all_loss, axis=1) # [BATCH*VIEWS]
-    #     tf.contrib.summary.histogram("winning_pose_candidates", min_loss)
-    #
-    #     min_loss_mask = tf.one_hot(min_loss, num_candidates) # [BATCH*VIEWS, CANDIDATES]
-    #     num_samples = min_loss_mask.shape[0]
-    #
-    #     min_loss_mask_flat = tf.reshape(min_loss_mask, [-1]) # [BATCH*VIEWS*CANDIDATES]
-    #     min_loss_mask_final = tf.reshape(min_loss_mask_flat, [-1, 1, 1, 1]) # [BATCH*VIEWS*CANDIDATES, 1, 1, 1]
-    #     loss_tensor = (gt - pred) * min_loss_mask_final
-    #     if cfg.variable_num_views:
-    #         weights = inputs["valid_samples"]
-    #         weights = tf_repeat_0(weights, num_candidates)
-    #         weights = tf.reshape(weights, [weights.shape[0], 1, 1, 1])
-    #         loss_tensor *= weights
-    #     proj_loss = tf.nn.l2_loss(loss_tensor)
-    #     proj_loss /= tf.to_float(num_samples)
-    #
-    #     return proj_loss, min_loss
-    #
-    # def add_student_loss(self, inputs, outputs, min_loss, add_summary):
-    #     cfg = self.cfg()
-    #     num_candidates = cfg.pose_predict_num_candidates
-    #
-    #     student = outputs["pose_student"]
-    #     teachers = outputs["poses"]
-    #     teachers = tf.reshape(teachers, [-1, num_candidates, 4])
-    #
-    #     indices = min_loss
-    #     indices = tf.expand_dims(indices, axis=-1)
-    #     batch_size = teachers.shape[0]
-    #     batch_indices = tf.range(0, batch_size, 1, dtype=tf.int64)
-    #     batch_indices = tf.expand_dims(batch_indices, -1)
-    #     indices = tf.concat([batch_indices, indices], axis=1)
-    #     teachers = tf.gather_nd(teachers, indices)
-    #     # use teachers only as ground truth
-    #     teachers = tf.stop_gradient(teachers)
-    #
-    #     if cfg.variable_num_views:
-    #         weights = inputs["valid_samples"]
-    #     else:
-    #         weights = 1.0
-    #
-    #     if cfg.pose_student_align_loss:
-    #         ref_pc = self._pc_for_alignloss
-    #         num_ref_points = ref_pc.shape.as_list()[0]
-    #         ref_pc_all = tf.tile(tf.expand_dims(ref_pc, axis=0), [teachers.shape[0], 1, 1])
-    #         pc_1 = q_rotate(ref_pc_all, teachers)
-    #         pc_2 = q_rotate(ref_pc_all, student)
-    #         student_loss = tf.nn.l2_loss(pc_1 - pc_2) / num_ref_points
-    #     else:
-    #         q_diff = q_norm(q_mul(teachers, q_conj(student)))
-    #         angle_diff = q_diff[:, 0]
-    #         student_loss = tf.reduce_sum((1.0 - tf.square(angle_diff)) * weights)
-    #
-    #     num_samples = min_loss.shape[0]
-    #     student_loss /= tf.to_float(num_samples)
-    #
-    #     if add_summary:
-    #         tf.contrib.summary.scalar("losses/pose_predictor_student_loss", student_loss)
-    #     student_loss *= cfg.pose_predictor_student_loss_weight
-    #
-    #     return student_loss
-    #
-    # def add_proj_loss(self, inputs, outputs, weight_scale, add_summary):
-    #     cfg = self.cfg()
-    #     gt = inputs['masks']
-    #     pred = outputs['projs']
-    #     num_samples = pred.shape[0]
-    #
-    #     gt_size = gt.shape[1]
-    #     pred_size = pred.shape[1]
-    #     assert gt_size >= pred_size, "GT size should not be higher than prediction size"
-    #     if gt_size > pred_size:
-    #         if cfg.bicubic_gt_downsampling:
-    #             interp_method = tf.image.ResizeMethod.BICUBIC
-    #         else:
-    #             interp_method = tf.image.ResizeMethod.BILINEAR
-    #         gt = tf.image.resize_images(gt, [pred_size, pred_size], interp_method)
-    #     if cfg.pc_gauss_filter_gt:
-    #         sigma_rel = self._sigma_rel
-    #         smoothed = gauss_smoothen_image(cfg, gt, sigma_rel)
-    #         if cfg.pc_gauss_filter_gt_switch_off:
-    #             gt = tf.where(tf.less(sigma_rel, 1.0), gt, smoothed)
-    #         else:
-    #             gt = smoothed
-    #
-    #     total_loss = 0
-    #     num_candidates = cfg.pose_predict_num_candidates
-    #     if num_candidates > 1:
-    #         proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs)
-    #         if cfg.pose_predictor_student:
-    #             student_loss = self.add_student_loss(inputs, outputs, min_loss, add_summary)
-    #             total_loss += student_loss
-    #     else:
-    #         proj_loss = tf.nn.l2_loss(gt - pred)
-    #         proj_loss /= tf.to_float(num_samples)
-    #
-    #     total_loss += proj_loss
-    #
-    #     if add_summary:
-    #         tf.contrib.summary.scalar("losses/proj_loss", proj_loss)
-    #
-    #     total_loss *= weight_scale
-    #     return total_loss
-    #
-    # def get_loss(self, inputs, outputs, add_summary=True):
-    #     """Computes the loss used for PTN paper (projection + volume loss)."""
-    #     cfg = self.cfg()
-    #     g_loss = tf.zeros(dtype=tf.float32, shape=[])
-    #
-    #     if cfg.proj_weight:
-    #         g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, add_summary)
-    #
-    #     if cfg.drc_weight:
-    #         g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
-    #
-    #     if cfg.pc_rgb:
-    #         g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
-    #
-    #     if cfg.proj_depth_weight:
-    #         g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
-    #
-    #     if add_summary:
-    #         tf.contrib.summary.scalar("losses/total_task_loss", g_loss)
-    #
-    #     return g_loss
+
+
+    def add_proj_loss(self, inputs, outputs, weight_scale, summary_writer, add_summary):
+        cfg = self.cfg()
+        gt = inputs['masks']
+        pred = outputs['projs']
+        num_samples = pred.shape[0]
+
+        gt_size = gt.shape[2]
+        pred_size = pred.shape[2]
+        assert gt_size >= pred_size, "GT size should not be higher than prediction size"
+        if gt_size > pred_size:
+            n_dsmpl = gt_size//pred_size
+            # if cfg.bicubic_gt_downsampling:
+            #     interp_method = tf.image.ResizeMethod.BICUBIC
+            # else:
+            #     interp_method = tf.image.ResizeMethod.BILINEAR
+            gt = nn.AvgPool2d(n_dsmpl)(gt)
+        if cfg.pc_gauss_filter_gt:
+            print("Not implemented")
+            # import pdb
+            # pdb.set_trace()
+            # sigma_rel = self._sigma_rel
+            # smoothed = gauss_smoothen_image(cfg, gt, sigma_rel)
+            # if cfg.pc_gauss_filter_gt_switch_off:
+            #     gt = tf.where(tf.less(sigma_rel, 1.0), gt, smoothed)
+            # else:
+            #     gt = smoothed
+        total_loss = 0
+        num_candidates = cfg.pose_predict_num_candidates
+        if num_candidates > 1:
+            proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs, summary_writer)
+            if cfg.pose_predictor_student:
+                student_loss = self.add_student_loss(inputs, outputs, min_loss, add_summary)
+                total_loss += student_loss
+        else:
+            proj_loss = nn.MSELoss(gt - pred)
+            proj_loss /= num_samples
+
+        total_loss += proj_loss
+
+        if add_summary:
+            summary_writer.add_scalar("losses/proj_loss", proj_loss)
+
+        total_loss *= weight_scale
+        return total_loss
+
+    def get_loss(self, inputs, outputs, summary_writer, add_summary=True):
+        """Computes the loss used for PTN paper (projection + volume loss)."""
+        cfg = self.cfg()
+        g_loss = 0
+
+        if cfg.proj_weight:
+            g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary)
+        #
+        # if cfg.drc_weight:
+        #     g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
+        #
+        # if cfg.pc_rgb:
+        #     g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
+        #
+        # if cfg.proj_depth_weight:
+        #     g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
+        #
+        # if add_summary:
+        #     summary_writer.add_scalar("losses/total_task_loss", g_loss)
+        #
+        return g_loss
+
+    def proj_loss_pose_candidates(self, gt, pred, inputs, summary_writer):
+        """
+        :param gt: [BATCH*VIEWS, IM_SIZE, IM_SIZE, 1]
+        :param pred: [BATCH*VIEWS*CANDIDATES, IM_SIZE, IM_SIZE, 1]
+        :return: [], [BATCH*VIEWS]
+        """
+        cfg = self.cfg()
+        num_candidates = cfg.pose_predict_num_candidates
+        gt = tf_repeat_0(gt, num_candidates) # [BATCH*VIEWS*CANDIDATES, IM_SIZE, IM_SIZE, 1]
+        sq_diff = (gt - pred)**2
+        all_loss = sq_diff.sum((1,2,3))# [BATCH*VIEWS*CANDIDATES]
+        all_loss = all_loss.reshape(-1, num_candidates) # [BATCH*VIEWS, CANDIDATES]
+        min_loss = all_loss.argmin(1) # [BATCH*VIEWS]
+        if summary_writer is not None:
+            summary_writer.add_histogram("winning_pose_candidates", min_loss)
+
+        min_loss_mask = one_hot(min_loss, num_candidates) # [BATCH*VIEWS, CANDIDATES]
+        num_samples = min_loss_mask.shape[0]
+
+        min_loss_mask_flat = min_loss_mask.reshape(-1) # [BATCH*VIEWS*CANDIDATES]
+        min_loss_mask_final = min_loss_mask_flat.reshape(-1, 1, 1, 1) # [BATCH*VIEWS*CANDIDATES, 1, 1, 1]
+        loss_tensor = (gt - pred) * min_loss_mask_final
+        if cfg.variable_num_views:
+            weights = inputs["valid_samples"]
+            weights = tf_repeat_0(weights, num_candidates)
+            weights = weights.reshape(weights.shape[0], 1, 1, 1)
+            loss_tensor *= weights
+        proj_loss = (loss_tensor**2).sum()
+        proj_loss /= num_samples
+
+        return proj_loss, min_loss
+
+    def add_student_loss(self, inputs, outputs, min_loss,summary_writer, add_summary):
+        cfg = self.cfg()
+        num_candidates = cfg.pose_predict_num_candidates
+
+        student = outputs["pose_student"]
+        teachers = outputs["poses"]
+        teachers = teachers.reshape(-1, num_candidates, 4)
+
+        indices = min_loss
+        indices = indices.reshape(indices.shape[0],1)
+        batch_size = teachers.shape[0]
+        batch_indices = torch.arange(0, batch_size, 1).long()
+        batch_indices = batch_indices.reshape(batch_indices.shape[0],1)
+        indices = torch.cat([batch_indices, indices], dim=1)
+        teachers = teachers[indices]
+        # use teachers only as ground truth
+        teachers = teachers.detach()
+
+        if cfg.variable_num_views:
+            weights = inputs["valid_samples"]
+        else:
+            weights = 1.0
+
+        if cfg.pose_student_align_loss:
+            ref_pc = self._pc_for_alignloss
+            num_ref_points = ref_pc.shape.as_list()[0]
+            import pdb
+            pdb.set_trace()
+            ref_pc_all = tf.tile(tf.expand_dims(ref_pc, axis=0), [teachers.shape[0], 1, 1])
+            pc_1 = q_rotate(ref_pc_all, teachers)
+            pc_2 = q_rotate(ref_pc_all, student)
+            student_loss = tf.nn.l2_loss(pc_1 - pc_2) / num_ref_points
+        else:
+            import pdb
+            pdb.set_trace()
+            q_diff = q_norm(q_mul(teachers, q_conj(student)))
+            angle_diff = q_diff[:, 0]
+            student_loss = ((1.0 - angle_diff**2) * weights).sum()
+
+        num_samples = min_loss.shape[0]
+        student_loss /= num_samples
+
+        if add_summary:
+            summary_writer.add_scalar("losses/pose_predictor_student_loss", student_loss)
+        student_loss *= cfg.pose_predictor_student_loss_weight
+
+        return student_loss

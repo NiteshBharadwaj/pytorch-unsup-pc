@@ -283,6 +283,10 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
     else:
         proj_rgb = None
 
+    proj = proj.permute(0,3,1,2)
+    proj_depth = proj_depth.permute(0,3,1,2)
+    if proj_rgb is not None:
+        proj_rgb = proj_rgb.permute(0,3,1,2)
     output = {
         "proj": proj,
         "voxels": voxels,

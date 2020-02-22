@@ -60,6 +60,8 @@ def train():
     train_data = next(iter(dataset_loader))
     inputs = model.preprocess(train_data, cfg.step_size)
     outputs = model(inputs, global_step, is_training=True, run_projection=True)
+    loss = model.get_loss(inputs,outputs,summary_writer,add_summary=True)
+    print(loss)
 
     # with summary_writer.as_default(), tfsum.record_summaries_every_n_global_steps(10):
     #     global_step = tf.train.get_or_create_global_step()
