@@ -85,7 +85,8 @@ def quaternion_multiply(a, b):
 
 def quaternion_conjugate(q):
     """Compute the conjugate of q, i.e. [q.w, -q.x, -q.y, -q.z]."""
-    conj_array = torch.from_numpy(np.array([1.0, -1.0, -1.0, -1.0]))
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    conj_array = torch.from_numpy(np.array([1.0, -1.0, -1.0, -1.0])).to(device)
     return q * conj_array
 
 
@@ -96,7 +97,7 @@ def quaternion_normalise(q):
     Returns:
         q / ||q||_2
     """
-    return q / torch.norm(q, axis=-1, keepdims=True)
+    return q / q.norm(p=2,dim=-1).reshape(q.shape[0],1)
 
 
 def quaternion_rotate(pc, q, inverse=False):

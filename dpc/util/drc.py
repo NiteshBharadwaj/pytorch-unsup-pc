@@ -91,10 +91,11 @@ def drc_event_probabilities_impl(voxels, cfg):
         r = torch.cat(collection, dim=0)
 
     r = r.repeat(input.shape[0],1,1,1,1)
-    r1 = unity_fn(singleton_shape, dtype=dtp)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    r1 = unity_fn(singleton_shape, dtype=dtp).to(device)
     p1 = torch.cat([r1, r], dim=0)  # [1, x1, x1*x2, x1*x2*x3]
 
-    r2 = unity_fn(singleton_shape, dtype=dtp)
+    r2 = unity_fn(singleton_shape, dtype=dtp).to(device)
     p2 = torch.cat([y, r2], dim=0)  # [(1-x1), (1-x2), (1-x3), 1])
 
     p = op_fn(p1, p2)  # [(1-x1), x1*(1-x2), x1*x2*(1-x3), x1*x2*x3]
@@ -118,7 +119,8 @@ def drc_projection(voxels, cfg):
     # for silhouettes simply: [1, 1, 1, 0]
     c0 = torch.ones(input.shape, dtype=dtp)
     c1 = torch.zeros(tuple(singleton_shape), dtype=dtp)
-    c = torch.cat([c0, c1], axis=0)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    c = torch.cat([c0, c1], axis=0).to(device)
 
     # \sum_{i=1:vox_size} {p_i * c_i}
     out = torch.sum(p * c, 0)
@@ -150,7 +152,8 @@ def drc_depth_projection(p, cfg):
     z_size = p.shape[0]
     z_size = z_size- 1  # because p is already of size vox_size + 1
     depth_grid = drc_depth_grid(cfg, z_size)
-    psi = depth_grid.reshape(-1, 1, 1, 1, 1)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    psi = depth_grid.reshape(-1, 1, 1, 1, 1).to(device)
     # \sum_{i=1:vox_size} {p_i * psi_i}
     out = torch.sum(p * psi, 0)
     return out

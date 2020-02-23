@@ -75,15 +75,15 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     filter_outliers = True
     valid = (pc >= -half_size) * (pc <= half_size)
     valid = torch.prod(valid, dim=-1)
-
-    vox_size_tf = torch.from_numpy(np.array([[[vox_size_z, vox_size, vox_size]]]))
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    vox_size_tf = torch.from_numpy(np.array([[[vox_size_z, vox_size, vox_size]]])).to(device)
     pc_grid = (pc + half_size) * (vox_size_tf - 1)
     indices_floor = torch.floor(pc_grid)
     indices_int = indices_floor.long()
     batch_indices = torch.arange(0, batch_size, 1)
     batch_indices = batch_indices.reshape(batch_indices.shape[0],1)
     batch_indices = batch_indices.repeat(1,num_points)
-    batch_indices = batch_indices.reshape(batch_indices.shape[0], batch_indices.shape[1],1)
+    batch_indices = batch_indices.reshape(batch_indices.shape[0], batch_indices.shape[1],1).to(device)
 
     indices = torch.cat((batch_indices, indices_int), dim=2)
     indices = indices.reshape(-1,4)
@@ -101,12 +101,13 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
         if filter_outliers:
             updates = updates[valid]
 
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
         indices_loc = indices
-        indices_shift = torch.from_numpy(np.array([[0] + pos]))
+        indices_shift = torch.from_numpy(np.array([[0] + pos])).to(device)
         num_updates = indices_loc.shape[0]
         indices_shift = indices_shift.repeat(num_updates,1)
         indices_loc = indices_loc + indices_shift
-        voxels = torch.zeros((batch_size, vox_size_z, vox_size, vox_size),dtype=torch.float64)
+        voxels = torch.zeros((batch_size, vox_size_z, vox_size, vox_size),dtype=torch.float64).to(device)
         voxels[indices_loc[:,0],indices_loc[:,1],indices_loc[:,2],indices_loc[:,3]] = updates
         if has_rgb:
             if cfg.pc_rgb_stop_points_gradient:
@@ -140,9 +141,11 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
 def smoothen_voxels3d(cfg, voxels, kernel):
     if cfg.pc_separable_gauss_filter:
         for krnl in kernel:
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            krnl.to(device)
             pad = np.array(krnl.shape[2:])//2
             pad = tuple(pad.astype(int).tolist())
-            voxels = F.conv3d(voxels, krnl.double(),stride=1, padding=pad)
+            voxels = F.conv3d(voxels, krnl.double().to(device),stride=1, padding=pad)
     else:
         pad = np.array(kernel.shape[2:]) // 2
         pad = tuple(pad.astype(int).tolist())
@@ -245,7 +248,10 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
 
     if kernel is not None:
         # TODO: Uncomment for GPU
-        #voxels = smoothen_voxels3d(cfg, voxels, kernel)
+        #
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        if device == 'cuda':
+            voxels = smoothen_voxels3d(cfg, voxels, kernel)
         if has_rgb:
             if not cfg.pc_rgb_clip_after_conv:
                 voxels_rgb = torch.clamp(voxels_rgb, 0.0, 1.0)

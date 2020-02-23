@@ -39,86 +39,97 @@ from util.fs import mkdir_if_missing
 
 
 def train():
-    cfg = app_config
+    with torch.no_grad():
+        cfg = app_config
 
-    setup_environment(cfg)
-
-    train_dir = cfg.checkpoint_dir
-    mkdir_if_missing(train_dir)
-
-    split_name = "train"
-    dataset_folder = cfg.inp_dir
-
-
-    dataset = ShapeRecords(dataset_folder, cfg)
-
-    dataset_loader = torch.utils.data.DataLoader(dataset,
-                                                 batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
-                                                 num_workers=4)
-    summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
-
-    global_step = 0
-    model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
-    train_data = next(iter(dataset_loader))
-    inputs = model.preprocess(train_data, cfg.step_size)
-    outputs = model(inputs, global_step, is_training=True, run_projection=True)
-    loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True)
-    print(loss)
-
-    import pdb
-    pdb.set_trace()
-    ckpt_count = 10
-    
-    # loading pre existing model
-    
-    
-    # creating a new model
-    model = model_pc.ModelPointCloud(cfg, summary_writer, 0)
-    log_dir = '../../dpc/run/model_run_data/'
-    learning_rate = 1e-4
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    
-#     train_data = next(iter(dataset_loader))
-#     inputs = model.preprocess(train_data, cfg.step_size)
-
-    # training steps
-    global_step_val = 0
-
-    while global_step_val < cfg.max_number_of_steps:
+        setup_environment(cfg)
         
-        step_loss = 0.0
-        for i, train_data in enumerate(dataset_loader, 0):
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        train_dir = cfg.checkpoint_dir
+        mkdir_if_missing(train_dir)
+
+        split_name = "train"
+        dataset_folder = cfg.inp_dir
+
+        dataset = ShapeRecords(dataset_folder, cfg)
+        dataset_loader = torch.utils.data.DataLoader(dataset,
+                                                     batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
+                                                     num_workers=4,drop_last=True)
+        summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
+
+        global_step = 0
+        model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
+        model = model.to(device)
+        train_data = next(iter(dataset_loader))
+        inputs = model.preprocess(train_data, cfg.step_size)
+        for k in inputs.keys():
+            try:
+                inputs[k] = inputs[k].to(device)
+            except AttributeError:
+                pass
+
+        outputs = model(inputs, global_step, is_training=True, run_projection=True)
+        loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True)
+        print(loss)
+
+        #import pdb
+        #pdb.set_trace()
+        ckpt_count = 1000
+        
+        # loading pre existing model
+        
+        
+        # creating a new model
+        model = model_pc.ModelPointCloud(cfg, summary_writer, 0)
+        log_dir = '../../dpc/run/model_run_data/'
+        learning_rate = 1e-4
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        
+#         train_data = next(iter(dataset_loader))
+#         inputs = model.preprocess(train_data, cfg.step_size)
+
+        # training steps
+        global_step_val = 0
+
+        while global_step_val < cfg.max_number_of_steps:
             
-            # get inputs by data processing
-            inputs = model.preprocess(train_data, cfg.step_size)
-            
-            # zero the parameter gradients
-            optimizer.zero_grad()
-            
-            t0 = time.perf_counter()
-            outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
-            
-            # dummy loss function
-            loss = outputs['poses'][:,1].norm(2)
-            
-            loss.backward()
-            optimizer.step()
-            
-            t1 = time.perf_counter()
-            dt = t1 - t0
-            
-            step_loss += loss.item()
-            print(f"step: {global_step_val}, loss = {step_loss:.4f} ({dt:.3f} sec/step)")
-            if global_step_val % ckpt_count == 0: # save configuration
+            step_loss = 0.0
+            for i, train_data in enumerate(dataset_loader, 0):
                 
-                checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step_val))
-                torch.save({
-                  'global_step': global_step_val,
-                  'model_state_dict': model.state_dict(),
-                  'optimizer_state_dict': optimizer.state_dict(),
-                  'loss': step_loss
-                }, checkpoint_path)
-        global_step_val +=1
+                # get inputs by data processing
+                inputs = model.preprocess(train_data, cfg.step_size)
+                
+                # zero the parameter gradients
+                optimizer.zero_grad()
+                
+                t0 = time.perf_counter()
+                outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
+                
+                # dummy loss function
+                loss = outputs['poses'][:,1].norm(2)
+                if global_step_val %ckpt_count ==0:
+                    summary_writer.add_image('prediction',outputs['projs'].detach().cpu().numpy()[0])
+                    summary_writer.add_image('actual',inputs['masks'].detach().cpu().numpy()[0])
+                loss.requires_grad = True
+                loss.backward()
+                optimizer.step()
+                
+                t1 = time.perf_counter()
+                dt = t1 - t0
+                
+                step_loss += loss.item()
+                print(f"step: {global_step_val}, loss = {step_loss:.4f} ({dt:.3f} sec/step)")
+                if global_step_val % ckpt_count == 0: # save configuration
+                    
+                    checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step_val))
+                    print("PATH:",checkpoint_path)
+                    torch.save({
+                      'global_step': global_step_val,
+                      'model_state_dict': model.state_dict(),
+                      'optimizer_state_dict': optimizer.state_dict(),
+                      'loss': step_loss
+                    }, checkpoint_path)
+                global_step_val +=1
 #             pdb.set_trace()
 
     

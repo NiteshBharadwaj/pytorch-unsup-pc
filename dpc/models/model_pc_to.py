@@ -25,7 +25,11 @@ from nets.net_factory import get_network
 
 def one_hot(y,num):
     batch_size = y.shape[0]
-    y_onehot = torch.FloatTensor(batch_size,num)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    if device != 'cuda':
+        y_onehot = torch.FloatTensor(batch_size,num)
+    else:
+        y_onehot = torch.cuda.FloatTensor(batch_size,num)
 
     # In your for loop
     y_onehot.zero_()
@@ -34,10 +38,10 @@ def one_hot(y,num):
 
 def init_weights(m):
     if type(m) == nn.Linear:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
     if type(m) == nn.Conv2d:
-        torch.nn.init.xavier_uniform(m.weight)
+        torch.nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
 
 def tf_repeat_0(input, num):
@@ -123,7 +127,8 @@ class ScalePredictor(nn.Module):  # pylint:disable=invalid-name
         x = self.fc(x)
         pred = self.sigmoid(x) * self.cfg.pc_occupancy_scaling_maximum
         if is_training:
-            self.summary_writer.add_scalar("pc_occupancy_scaling_factor", pred.mean().detach().numpy())
+            predcpu = pred.cpu()
+            self.summary_writer.add_scalar("pc_occupancy_scaling_factor", predcpu.mean().detach().numpy())
         return pred
 
 class FocalLengthPredictor(nn.Module):
@@ -138,7 +143,8 @@ class FocalLengthPredictor(nn.Module):
         pred = self.fc(x)
         out = self.cfg.focal_length_mean + self.sigmoid(pred)*self.cfg.focal_length_range
         if is_training:
-            self.summary_writer.add_scalar("meta/focal_length", out.mean().detach().numpy())
+            outcpu = out.cpu()
+            self.summary_writer.add_scalar("meta/focal_length", outcpu.mean().detach().numpy())
         return out
 
 class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
@@ -314,7 +320,13 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             else:
                 all_rgb = None
             outputs['all_rgb'] = all_rgb
-
+          
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            for k in outputs.keys():
+                try:
+                    outputs[k] = outputs[k].to(device)
+                except AttributeError:
+                    pass
             outputs = self.compute_projection(inputs, outputs, is_training, self.summary_writer)
 
         return outputs
@@ -351,7 +363,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         if num_candidates > 1:
             proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs, summary_writer)
             if cfg.pose_predictor_student:
-                student_loss = self.add_student_loss(inputs, outputs, min_loss, add_summary)
+                student_loss = self.add_student_loss(inputs, outputs, min_loss, summary_writer, add_summary)
                 total_loss += student_loss
         else:
             proj_loss = nn.MSELoss(gt - pred)
@@ -372,19 +384,19 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         if cfg.proj_weight:
             g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary)
-        #
-        # if cfg.drc_weight:
-        #     g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
-        #
-        # if cfg.pc_rgb:
-        #     g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
-        #
-        # if cfg.proj_depth_weight:
-        #     g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
-        #
-        # if add_summary:
-        #     summary_writer.add_scalar("losses/total_task_loss", g_loss)
-        #
+       # 
+       # if cfg.drc_weight:
+       #     g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
+       # 
+       # if cfg.pc_rgb:
+       #     g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
+       # 
+       # if cfg.proj_depth_weight:
+       #     g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
+       # 
+       # if add_summary:
+       #     summary_writer.add_scalar("losses/total_task_loss", g_loss)
+        
         return g_loss
 
     def proj_loss_pose_candidates(self, gt, pred, inputs, summary_writer):
@@ -419,7 +431,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         return proj_loss, min_loss
 
-    def add_student_loss(self, inputs, outputs, min_loss,summary_writer, add_summary):
+    def add_student_loss(self, inputs, outputs, min_loss, summary_writer, add_summary):
         cfg = self.cfg()
         num_candidates = cfg.pose_predict_num_candidates
 
@@ -431,9 +443,10 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         indices = indices.reshape(indices.shape[0],1)
         batch_size = teachers.shape[0]
         batch_indices = torch.arange(0, batch_size, 1).long()
-        batch_indices = batch_indices.reshape(batch_indices.shape[0],1)
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        batch_indices = batch_indices.reshape(batch_indices.shape[0],1).to(device)
         indices = torch.cat([batch_indices, indices], dim=1)
-        teachers = teachers[indices]
+        teachers= teachers[indices.transpose(0,1).long().cpu().numpy().tolist()]
         # use teachers only as ground truth
         teachers = teachers.detach()
 
@@ -445,15 +458,15 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         if cfg.pose_student_align_loss:
             ref_pc = self._pc_for_alignloss
             num_ref_points = ref_pc.shape.as_list()[0]
-            import pdb
-            pdb.set_trace()
+            #import pdb
+            #pdb.set_trace()
             ref_pc_all = tf.tile(tf.expand_dims(ref_pc, axis=0), [teachers.shape[0], 1, 1])
             pc_1 = q_rotate(ref_pc_all, teachers)
             pc_2 = q_rotate(ref_pc_all, student)
             student_loss = tf.nn.l2_loss(pc_1 - pc_2) / num_ref_points
         else:
-            import pdb
-            pdb.set_trace()
+            #import pdb
+            #pdb.set_trace()
             q_diff = q_norm(q_mul(teachers, q_conj(student)))
             angle_diff = q_diff[:, 0]
             student_loss = ((1.0 - angle_diff**2) * weights).sum()
