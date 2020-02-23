@@ -271,7 +271,9 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         batch_size = outputs['points_1'].shape[0]
         outputs['projs_1'] = proj[0:batch_size, :, :, :]
-
+        
+        import pdb
+        pdb.set_trace()
         return outputs
 
     def replicate_for_multiview(self, tensor):
@@ -384,18 +386,18 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         if cfg.proj_weight:
             g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary)
-       # 
-       # if cfg.drc_weight:
-       #     g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
-       # 
-       # if cfg.pc_rgb:
-       #     g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
-       # 
-       # if cfg.proj_depth_weight:
-       #     g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
-       # 
-       # if add_summary:
-       #     summary_writer.add_scalar("losses/total_task_loss", g_loss)
+        
+        if cfg.drc_weight:
+            g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
+        
+        if cfg.pc_rgb:
+            g_loss += add_proj_rgb_loss(cfg, inputs, outputs, cfg.proj_rgb_weight, add_summary, self._sigma_rel)
+        
+        if cfg.proj_depth_weight:
+            g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
+        
+        if add_summary:
+            summary_writer.add_scalar("losses/total_task_loss", g_loss)
         
         return g_loss
 
@@ -445,8 +447,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         batch_indices = torch.arange(0, batch_size, 1).long()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         batch_indices = batch_indices.reshape(batch_indices.shape[0],1).to(device)
-        indices = torch.cat([batch_indices, indices], dim=1)
-        teachers= teachers[indices.transpose(0,1).long().cpu().numpy().tolist()]
+        indices = torch.cat([batch_indices, indices], dim=1).long()
+        teachers= teachers[indices[:,0],indices[:,1]]
         # use teachers only as ground truth
         teachers = teachers.detach()
 

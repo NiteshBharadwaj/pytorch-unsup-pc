@@ -118,7 +118,8 @@ def train():
                 dt = t1 - t0
                 
                 step_loss += loss.item()
-                print(f"step: {global_step_val}, loss = {step_loss:.4f} ({dt:.3f} sec/step)")
+                loss_avg = step_loss/(i+1)
+                print(f"step: {global_step_val}, loss= {loss.item():.5f}, loss_average = {loss_avg:.4f} ({dt:.3f} sec/step)")
                 if global_step_val % ckpt_count == 0: # save configuration
                     
                     checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step_val))
@@ -127,7 +128,7 @@ def train():
                       'global_step': global_step_val,
                       'model_state_dict': model.state_dict(),
                       'optimizer_state_dict': optimizer.state_dict(),
-                      'loss': step_loss
+                      'loss': loss_avg
                     }, checkpoint_path)
                 global_step_val +=1
 #             pdb.set_trace()
