@@ -60,11 +60,15 @@ class ModelBase(nn.Module):
 
             return out, valid_samples
 
-        num_actual_views = raw_inputs['num_views'] if var_num_views else 0
+        num_actual_views = raw_inputs['num_views'].cpu().numpy() if var_num_views else 0
 
         indices, valid_samples = batch_sampler(num_actual_views)
         indices = torch.from_numpy(indices)
-        valid_samples = torch.from_numpy(valid_samples)
+        if torch.cuda.is_available():
+            valid_samples = torch.from_numpy(valid_samples).cuda()
+        else:
+            valid_samples = torch.from_numpy(valid_samples)
+
 
         indices = indices.reshape(step_size*quantity, 2)
         inputs['valid_samples'] = valid_samples.reshape(step_size*quantity)
@@ -75,7 +79,7 @@ class ModelBase(nn.Module):
         inputs['images_1'] = pool_single_view(cfg, inputs['images'], 0)
 
         def fix_matrix(extr):
-            out = np.zeros_like(extr)
+            out = np.zeros(extr.shape)
             num_matrices = extr.shape[0]
             for k in range(num_matrices):
                 out[k, :, :] = camera_from_blender(extr[k, :, :])
@@ -93,7 +97,11 @@ class ModelBase(nn.Module):
             orig_shape = matrices.shape
             extr_tf = fix_matrix(matrices)
             inputs['matrices'] = extr_tf.reshape(orig_shape)
-
+            
+            if torch.cuda.is_available():
+                inputs['matrices'] = torch.from_numpy(extr_tf.reshape(orig_shape)).cuda()
+            else:
+                inputs['matrices'] = torch.from_numpy(extr_tf.reshape(orig_shape))
             cam_pos = select_2d(raw_inputs['cam_pos'],indices)
             orig_shape = cam_pos.shape
             quaternion = quaternion_from_campos_wrapper(cam_pos)

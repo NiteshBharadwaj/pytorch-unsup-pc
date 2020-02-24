@@ -39,7 +39,6 @@ from util.fs import mkdir_if_missing
 
 
 def train():
-    with torch.no_grad():
         cfg = app_config
 
         setup_environment(cfg)
@@ -67,8 +66,12 @@ def train():
                 inputs[k] = inputs[k].to(device)
             except AttributeError:
                 pass
-
+        
         outputs = model(inputs, global_step, is_training=True, run_projection=True)
+        
+        for key in outputs.keys():
+            if outputs[key] is not None:
+                print(key, outputs[key].mean(),outputs[key].std())
         loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True)
         print(loss)
 
@@ -90,33 +93,47 @@ def train():
 
         # training steps
         global_step_val = 0
-
+        model.train()
         while global_step_val < cfg.max_number_of_steps:
             
             step_loss = 0.0
             for i, train_data in enumerate(dataset_loader, 0):
-                
+               
+                t9 = time.perf_counter()
+                for k in train_data.keys():
+                    try:
+                        train_data[k] = train_data[k].to(device)
+                    except AttributeError:
+                        pass
                 # get inputs by data processing
+                
+                
+                t0 = time.perf_counter()
                 inputs = model.preprocess(train_data, cfg.step_size)
                 
+                t1 = time.perf_counter()
                 # zero the parameter gradients
                 optimizer.zero_grad()
                 
-                t0 = time.perf_counter()
                 outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
                 
+                t2 = time.perf_counter()
                 # dummy loss function
                 loss = outputs['poses'][:,1].norm(2)
                 if global_step_val %ckpt_count ==0:
                     summary_writer.add_image('prediction',outputs['projs'].detach().cpu().numpy()[0])
                     summary_writer.add_image('actual',inputs['masks'].detach().cpu().numpy()[0])
-                loss.requires_grad = True
                 loss.backward()
                 optimizer.step()
+                del inputs
+                del outputs
+                t3 = time.perf_counter()
+                dt = t3 - t9
                 
-                t1 = time.perf_counter()
-                dt = t1 - t0
-                
+                #print('Cuda {}'.format(t0-t9))
+                #print('Preprocess {}'.format(t1-t0))
+                #print('Forward {}'.format(t2-t1))
+                #print('Backward {}'.format(t3-t2))
                 step_loss += loss.item()
                 loss_avg = step_loss/(i+1)
                 print(f"step: {global_step_val}, loss= {loss.item():.5f}, loss_average = {loss_avg:.4f} ({dt:.3f} sec/step)")

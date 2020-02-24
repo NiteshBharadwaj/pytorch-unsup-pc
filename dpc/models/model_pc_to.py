@@ -167,7 +167,12 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         self.poseNet = PoseNet(cfg)
         self.scalePred = ScalePredictor(cfg,summary_writer)
         self.focalPred = FocalLengthPredictor(cfg,summary_writer)
-
+        if torch.cuda.is_available():
+            self.encoder = Encoder(cfg).cuda() 
+            self.decoder = Decoder(cfg).cuda()
+            self.poseNet = PoseNet(cfg).cuda()
+            self.scalePred = ScalePredictor(cfg,summary_writer).cuda()
+            self.focalPred = FocalLengthPredictor(cfg,summary_writer).cuda()
 
     def setup_sigma(self):
         cfg = self.cfg()
@@ -245,13 +250,14 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
                 camera_pose = inputs['camera_quaternion']
             else:
                 camera_pose = inputs['matrices']
-
+        import time
+        t0 = time.perf_counter()
         if is_training and cfg.pc_point_dropout != 1:
             dropout_prob = self.get_dropout_keep_prob()
             if is_training and summary_writer is not None:
                 summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob)
             all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
-
+        t1 = time.perf_counter()
         if cfg.pc_fast:
             predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
             proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
@@ -266,14 +272,14 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             proj, voxels = pointcloud_project(cfg, all_points, camera_pose, self.gauss_sigma())
             outputs["projs_rgb"] = None
             outputs["projs_depth"] = None
-
+        t2 = time.perf_counter()
         outputs['projs'] = proj
+        #print('Dropout points {}'.format(t1-t0))
+        #print('Project actual {}'.format(t2-t1))
 
         batch_size = outputs['points_1'].shape[0]
         outputs['projs_1'] = proj[0:batch_size, :, :, :]
         
-        import pdb
-        pdb.set_trace()
         return outputs
 
     def replicate_for_multiview(self, tensor):
@@ -288,11 +294,12 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         else:
             self.eval()
         self._global_step = global_step
-
+        import time
+        t0 = time.perf_counter()
         code = 'images' if cfg.predict_pose else 'images_1'
         outputs = self.model_predict(inputs[code], is_training)
         pc = outputs['points_1']
-
+        t1 = time.perf_counter()
         if run_projection:
             all_points = self.replicate_for_multiview(pc)
             num_candidates = cfg.pose_predict_num_candidates
@@ -322,15 +329,12 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             else:
                 all_rgb = None
             outputs['all_rgb'] = all_rgb
-          
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-            for k in outputs.keys():
-                try:
-                    outputs[k] = outputs[k].to(device)
-                except AttributeError:
-                    pass
+            t2 = time.perf_counter()
             outputs = self.compute_projection(inputs, outputs, is_training, self.summary_writer)
-
+            t3 = time.perf_counter()
+        #print('Predict {}'.format(t1-t0))
+        #print('Pre run projection {}'.format(t2-t1))
+        #print('Projection {}'.format(t3-t2))
         return outputs
 
 

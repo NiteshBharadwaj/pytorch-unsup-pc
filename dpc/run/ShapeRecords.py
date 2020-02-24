@@ -2,7 +2,8 @@ import torch
 from torch.utils import data
 import os
 import pickle
-
+import cv2
+import numpy as np
 
 class ShapeRecords(data.Dataset):
 
@@ -22,11 +23,20 @@ class ShapeRecords(data.Dataset):
         with open(fname, 'rb') as f:
             input = {}
             feature = pickle.load(f)
-            input['image'] = feature['image'].transpose(0,3,1,2)
-            input['mask'] = feature['mask'].transpose(0,3,1,2)
+            image = feature['image']
+            mask = feature['mask']
+            image_res = np.zeros((image.shape[0],self.cfg.image_size, self.cfg.image_size,image.shape[3]),dtype=np.float32)
+            mask_res = np.zeros((mask.shape[0],self.cfg.image_size,self.cfg.image_size,mask.shape[3]),dtype=np.float32)
+            for i in range(image.shape[0]):
+                image_res[i] = cv2.resize(image[i],(self.cfg.image_size,self.cfg.image_size))
+                mask_res[i] = cv2.resize(mask[i],(self.cfg.image_size,self.cfg.image_size)).reshape(self.cfg.image_size,self.cfg.image_size,1)
+            input['image'] = image_res.transpose(0,3,1,2)
+            input['mask'] = mask_res.transpose(0,3,1,2)
             if self.cfg.saved_camera:
                 input['extrinsic'] = feature['extrinsic']
                 input['cam_pos'] = feature['cam_pos']
             if self.cfg.saved_depth:
+                import pdb
+                pdb.set_trace()
                 input['depth'] = feature['depth']
             return input

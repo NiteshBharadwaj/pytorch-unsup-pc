@@ -6,57 +6,6 @@ import torch.nn.functional as F
 from util.camera import intrinsic_matrix
 # from util.point_cloud_distance import *
 
-#
-# def multi_expand(inp, axis, num):
-#     inp_big = inp
-#     for i in range(num):
-#         inp_big = tf.expand_dims(inp_big, axis)
-#     return inp_big
-
-#
-# def pointcloud2voxels(cfg, input_pc, sigma):  # [B,N,3]
-#     # TODO replace with split or tf.unstack
-#     x = input_pc[:, :, 0]
-#     y = input_pc[:, :, 1]
-#     z = input_pc[:, :, 2]
-#
-#     vox_size = cfg.vox_size
-#
-#     rng = tf.linspace(-1.0, 1.0, vox_size)
-#     xg, yg, zg = tf.meshgrid(rng, rng, rng)  # [G,G,G]
-#
-#     x_big = multi_expand(x, -1, 3)  # [B,N,1,1,1]
-#     y_big = multi_expand(y, -1, 3)  # [B,N,1,1,1]
-#     z_big = multi_expand(z, -1, 3)  # [B,N,1,1,1]
-#
-#     xg = multi_expand(xg, 0, 2)  # [1,1,G,G,G]
-#     yg = multi_expand(yg, 0, 2)  # [1,1,G,G,G]
-#     zg = multi_expand(zg, 0, 2)  # [1,1,G,G,G]
-#
-#     # squared distance
-#     sq_distance = tf.square(x_big - xg) + tf.square(y_big - yg) + tf.square(z_big - zg)
-#
-#     # compute gaussian
-#     func = tf.exp(-sq_distance / (2.0 * sigma * sigma))  # [B,N,G,G,G]
-#
-#     # normalise gaussian
-#     if cfg.pc_normalise_gauss:
-#         normaliser = tf.reduce_sum(func, [2, 3, 4], keep_dims=True)
-#         func /= normaliser
-#     elif cfg.pc_normalise_gauss_analytical:
-#         # should work with any grid sizes
-#         magic_factor = 1.78984352254  # see estimate_gauss_normaliser
-#         sigma_normalised = sigma * vox_size
-#         normaliser = 1.0 / (magic_factor * tf.pow(sigma_normalised, 3))
-#         func *= normaliser
-#
-#     summed = tf.reduce_sum(func, axis=1)  # [B,G,G G]
-#     voxels = tf.clip_by_value(summed, 0.0, 1.0)
-#     voxels = tf.expand_dims(voxels, axis=-1)  # [B,G,G,G,1]
-#
-#     return voxels
-
-
 def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     vox_size = cfg.vox_size
     if cfg.vox_size_z != -1:
@@ -84,7 +33,6 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     batch_indices = batch_indices.reshape(batch_indices.shape[0],1)
     batch_indices = batch_indices.repeat(1,num_points)
     batch_indices = batch_indices.reshape(batch_indices.shape[0], batch_indices.shape[1],1).to(device)
-
     indices = torch.cat((batch_indices, indices_int), dim=2)
     indices = indices.reshape(-1,4)
     r = pc_grid - indices_floor  # fractional part
@@ -94,7 +42,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
         valid = valid.reshape(-1)
         indices = indices[valid]
 
-    def interpolate_scatter3d(pos):
+    def interpolate_scatter3d(pos,voxels):
         updates_raw = rr[pos[0]][:, :, 0] * rr[pos[1]][:, :, 1] * rr[pos[2]][:, :, 2]
         updates = updates_raw.reshape(-1)
 
@@ -107,8 +55,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
         num_updates = indices_loc.shape[0]
         indices_shift = indices_shift.repeat(num_updates,1)
         indices_loc = indices_loc + indices_shift
-        voxels = torch.zeros((batch_size, vox_size_z, vox_size, vox_size),dtype=torch.float64).to(device)
-        voxels[indices_loc[:,0],indices_loc[:,1],indices_loc[:,2],indices_loc[:,3]] = updates
+        voxels[indices_loc[:,0],indices_loc[:,1],indices_loc[:,2],indices_loc[:,3]] += updates
         if has_rgb:
             if cfg.pc_rgb_stop_points_gradient:
                 updates_raw = updates_raw.detach()
@@ -122,17 +69,18 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
             voxels_rgb = None
 
         return voxels, voxels_rgb
-
-    voxels = []
+    import time
+    t0 = time.perf_counter()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    voxels = torch.zeros((batch_size, vox_size_z, vox_size, vox_size),dtype=torch.float64).to(device)
     voxels_rgb = []
     for k in range(2):
         for j in range(2):
             for i in range(2):
-                vx, vx_rgb = interpolate_scatter3d([k, j, i])
-                voxels.append(vx)
+                vx, vx_rgb = interpolate_scatter3d([k, j, i],voxels)
                 voxels_rgb.append(vx_rgb)
-
-    voxels = torch.sum(torch.stack(voxels),0)
+    t1 =time.perf_counter()
+    #print('Voxel_time {}'.format(t1-t0))
     voxels_rgb = torch.sum(torch.stack(voxels_rgb),0) if has_rgb else None
 
     return voxels, voxels_rgb
@@ -163,6 +111,7 @@ def convolve_rgb(cfg, voxels_rgb, kernel):
     out = torch.cat(channels, axis=1)
     return out
 
+instr_global = None
 
 def pc_perspective_transform(cfg, point_cloud,
                              transform, predicted_translation=None,
@@ -199,9 +148,12 @@ def pc_perspective_transform(cfg, point_cloud,
         xyz1 = F.pad(point_cloud, (0,1))
 
         extrinsic = transform
-        intr = intrinsic_matrix(cfg, dims=4)
-        intrinsic = torch.from_numpy(intr)
-        intrinsic = intrinsic.reshape(1,intrinsic.shape[0],intrinsic.shape[1])
+        if instr_global is None:
+            intr = intrinsic_matrix(cfg, dims=4)
+            intrinsic = torch.from_numpy(intr).cuda()
+            intrinsic = intrinsic.reshape(1,intrinsic.shape[0],intrinsic.shape[1])
+            instr_global = intrinsic
+        intrinsic = instr_global
         intrinsic = intrinsic.repeat(extrinsic.shape[0],1,1)
         full_cam_matrix = torch.matmul(intrinsic, extrinsic)
 
@@ -250,12 +202,12 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
         # TODO: Uncomment for GPU
         #
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        if device == 'cuda':
-            voxels = smoothen_voxels3d(cfg, voxels, kernel)
-        if has_rgb:
-            if not cfg.pc_rgb_clip_after_conv:
-                voxels_rgb = torch.clamp(voxels_rgb, 0.0, 1.0)
-            voxels_rgb = convolve_rgb(cfg, voxels_rgb, kernel)
+        #if device == 'cuda':
+        #    voxels = smoothen_voxels3d(cfg, voxels, kernel)
+        #if has_rgb:
+        #    if not cfg.pc_rgb_clip_after_conv:
+        #        voxels_rgb = torch.clamp(voxels_rgb, 0.0, 1.0)
+        #    voxels_rgb = convolve_rgb(cfg, voxels_rgb, kernel)
 
     if scaling_factor is not None:
         sz = scaling_factor.shape[0]
