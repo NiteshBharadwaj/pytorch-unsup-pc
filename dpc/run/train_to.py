@@ -73,7 +73,7 @@ def train():
         log_dir = '../../dpc/run/model_run_data/'
         mkdir_if_missing(log_dir)
         learning_rate = 1e-4
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay = cfg.weight_decay)
         
 #         train_data = next(iter(dataset_loader))
 #         inputs = model.preprocess(train_data, cfg.step_size)
