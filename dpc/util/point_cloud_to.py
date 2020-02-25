@@ -47,7 +47,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
         updates = updates_raw.reshape(-1)
 
         if filter_outliers:
-            updates = updates[valid]
+            updates = updates.masked_select(valid.bool()).reshape(-1)
 
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         indices_loc = indices
