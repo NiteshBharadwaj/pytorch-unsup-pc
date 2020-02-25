@@ -113,49 +113,45 @@ def align_predictions(outputs, alignment):
 class ScalePredictor(nn.Module):  # pylint:disable=invalid-name
     """Inherits the generic Im2Vox model class and implements the functions."""
 
-    def __init__(self, cfg, summary_writer):
+    def __init__(self, cfg):
         super(ScalePredictor, self).__init__()
         z_dim = cfg.z_dim
         self.fc = nn.Linear(z_dim,1)
         self.sigmoid = nn.Sigmoid()
         self.fc.apply(init_weights) ##TODO: Change init
         self.cfg = cfg
-        self.summary_writer = summary_writer
-    def forward(self,x, is_training):
+    def forward(self,x, is_training, summary_writer=None, global_step=0):
         x = self.fc(x)
         pred = self.sigmoid(x) * self.cfg.pc_occupancy_scaling_maximum
         if is_training:
             predcpu = pred.cpu()
-            self.summary_writer.add_scalar("pc_occupancy_scaling_factor", predcpu.mean().detach().numpy())
+            if summary_writer is not None:
+                summary_writer.add_scalar("pc_occupancy_scaling_factor", predcpu.mean().detach().numpy(), global_step)
         return pred
 
 class FocalLengthPredictor(nn.Module):
-    def __init__(self, cfg, summary_writer):
+    def __init__(self, cfg):
         super(FocalLengthPredictor, self).__init__()
         z_dim = cfg.z_dim
         self.fc = nn.Linear(z_dim,1)
         self.sigmoid = nn.Sigmoid()
         self.cfg = cfg
-        self.summary_writer = summary_writer
-    def forward(self,x,is_training):
+
+    def forward(self,x,is_training, summary_writer=None, global_step=0):
         pred = self.fc(x)
         out = self.cfg.focal_length_mean + self.sigmoid(pred)*self.cfg.focal_length_range
         if is_training:
             outcpu = out.cpu()
-            self.summary_writer.add_scalar("meta/focal_length", outcpu.mean().detach().numpy())
+            if summary_writer is not None:
+                summary_writer.add_scalar("meta/focal_length", outcpu.mean().detach().numpy(), global_step)
         return out
 
 class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
     """Inherits the generic Im2Vox model class and implements the functions."""
 
-    def __init__(self, cfg, summary_writer, global_step=0):
+    def __init__(self, cfg):
         super(ModelPointCloud, self).__init__(cfg)
-        self._gauss_sigma = None
-        self._gauss_kernel = None
-        self._sigma_rel = None
-        self._global_step = global_step
-        self.summary_writer = summary_writer
-        self.setup_sigma()
+
         self.setup_misc()
         self._alignment_to_canonical = None
         if cfg.align_to_canonical and cfg.predict_pose:
@@ -163,23 +159,24 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         self.encoder = Encoder(cfg)
         self.decoder = Decoder(cfg)
         self.poseNet = PoseNet(cfg)
-        self.scalePred = ScalePredictor(cfg,summary_writer)
-        self.focalPred = FocalLengthPredictor(cfg,summary_writer)
+        self.scalePred = ScalePredictor(cfg)
+        self.focalPred = FocalLengthPredictor(cfg)
         if torch.cuda.is_available():
             self.encoder = Encoder(cfg).cuda() 
             self.decoder = Decoder(cfg).cuda()
             self.poseNet = PoseNet(cfg).cuda()
-            self.scalePred = ScalePredictor(cfg,summary_writer).cuda()
-            self.focalPred = FocalLengthPredictor(cfg,summary_writer).cuda()
+            self.scalePred = ScalePredictor(cfg).cuda()
+            self.focalPred = FocalLengthPredictor(cfg).cuda()
 
-    def setup_sigma(self):
+    def setup_sigma(self, summmary_writer=None, global_step=0):
         cfg = self.cfg()
-        sigma_rel = get_smooth_sigma(cfg, self._global_step)
-        self.summary_writer.add_scalar("meta/gauss_sigma_rel", sigma_rel)
-        self._sigma_rel = sigma_rel
-        self._gauss_sigma = sigma_rel / cfg.vox_size
-        self._gauss_kernel = smoothing_kernel(cfg, sigma_rel)
-
+        sigma_rel = get_smooth_sigma(cfg, global_step)
+        if summmary_writer is not None:
+            summmary_writer.add_scalar("meta/gauss_sigma_rel", sigma_rel, global_step)
+        _sigma_rel = sigma_rel
+        _gauss_sigma = sigma_rel / cfg.vox_size
+        _gauss_kernel = smoothing_kernel(cfg, sigma_rel)
+        return _sigma_rel, _gauss_sigma, _gauss_kernel
     def gauss_sigma(self):
         return self._gauss_sigma
 
@@ -200,7 +197,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         alignment = stuff["rotation"]
         self._alignment_to_canonical = alignment
 
-    def model_predict(self, images, is_training=False, reuse=False, predict_for_all=False, alignment=None):
+    def model_predict(self, images, is_training=False, reuse=False, predict_for_all=False, alignment=None, summary_writer = None, global_step=0):
         outputs = {}
         cfg = self._params
         enc_outputs = self.encoder(images)
@@ -220,11 +217,11 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         pc = decoder_out['xyz']
         outputs['points_1'] = pc
         outputs['rgb_1'] = decoder_out['rgb']
-        outputs['scaling_factor'] = self.scalePred(outputs[key], is_training)
+        outputs['scaling_factor'] = self.scalePred(outputs[key], is_training, summary_writer, global_step)
         if not cfg.learn_focal_length:
             outputs['focal_length'] = None
         else:
-            outputs['focal_length']= self.focalPred(outputs['ids'], is_training)
+            outputs['focal_length']= self.focalPred(outputs['ids'], is_training, summary_writer, global_step)
 
         if cfg.predict_pose:
             pose_out = self.poseNet(enc_outputs['poses'])
@@ -235,14 +232,15 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         return outputs
 
-    def get_dropout_keep_prob(self):
+    def get_dropout_keep_prob(self, global_step):
         cfg = self.cfg()
-        return get_dropout_prob(cfg, self._global_step)
+        return get_dropout_prob(cfg, global_step)
 
-    def compute_projection(self, inputs, outputs, is_training, summary_writer):
+    def compute_projection(self, inputs, outputs, is_training, summary_writer, global_step):
         cfg = self.cfg()
         all_points = outputs['all_points']
         all_rgb = outputs['all_rgb']
+        _sigma_rel, _gauss_sigma, _gauss_kernel = self.setup_sigma(summary_writer, global_step)
 
         if cfg.predict_pose:
             camera_pose = outputs['poses']
@@ -254,7 +252,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         import time
         t0 = time.perf_counter()
         if is_training and cfg.pc_point_dropout != 1:
-            dropout_prob = self.get_dropout_keep_prob()
+            dropout_prob = self.get_dropout_keep_prob(global_step)
             if is_training and summary_writer is not None:
                 summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob)
             all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
@@ -262,7 +260,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         if cfg.pc_fast:
             predicted_translation = outputs["predicted_translation"] if cfg.predict_translation else None
             proj_out = pointcloud_project_fast(cfg, all_points, camera_pose, predicted_translation,
-                                               all_rgb, self.gauss_kernel(),
+                                               all_rgb, _gauss_kernel,
                                                scaling_factor=outputs['all_scaling_factors'],
                                                focal_length=outputs['all_focal_length'])
             proj = proj_out["proj"]
@@ -288,17 +286,16 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         new_tensor = tf_repeat_0(tensor, cfg.step_size)
         return new_tensor
 
-    def forward(self, inputs, global_step, is_training=True, run_projection=True):
+    def forward(self, inputs, global_step, is_training=True, run_projection=True, summary_writer=None):
         cfg = self._params
         if is_training:
             self.train()
         else:
             self.eval()
-        self._global_step = global_step
         import time
         t0 = time.perf_counter()
         code = 'images' if cfg.predict_pose else 'images_1'
-        outputs = self.model_predict(inputs[code], is_training)
+        outputs = self.model_predict(inputs[code], is_training, summary_writer=summary_writer, global_step=global_step)
         pc = outputs['points_1']
         t1 = time.perf_counter()
         if run_projection:
@@ -331,7 +328,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
                 all_rgb = None
             outputs['all_rgb'] = all_rgb
             t2 = time.perf_counter()
-            outputs = self.compute_projection(inputs, outputs, is_training, self.summary_writer)
+            outputs = self.compute_projection(inputs, outputs, is_training, summary_writer, global_step)
             t3 = time.perf_counter()
         #print('Predict {}'.format(t1-t0))
         #print('Pre run projection {}'.format(t2-t1))

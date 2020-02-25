@@ -65,7 +65,7 @@ def train():
         summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
 
         global_step = 0
-        model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
+        model = model_pc.ModelPointCloud(cfg)
         model = model.to(device)
 
         #import pdb
@@ -77,7 +77,7 @@ def train():
         
         
         # creating a new model
-        model = model_pc.ModelPointCloud(cfg, summary_writer, 0)
+        model = model_pc.ModelPointCloud(cfg)
         print(model.parameters)
         log_dir = '../../dpc/run/model_run_data/'
         mkdir_if_missing(log_dir)
@@ -110,10 +110,10 @@ def train():
                 t1 = time.perf_counter()
                 # zero the parameter gradients
                 optimizer.zero_grad()
-                outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
                 t2 = time.perf_counter()
                 # dummy loss function
                 if global_step_val % summary_count == 0:
+                    outputs = model(inputs, global_step_val, is_training=True, run_projection=True, summary_writer=summary_writer)
                     loss, min_loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True,
                                           global_step=global_step_val)
                     summary_writer.add_image('prediction',
@@ -122,6 +122,7 @@ def train():
                     summary_writer.add_image('actual', inputs['masks'].detach().cpu().numpy()[0].transpose(2, 0, 1),
                                              global_step_val)
                 else:
+                    outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
                     loss,_ = model.get_loss(inputs, outputs, add_summary=False)
                 loss.backward()
                 optimizer.step()
