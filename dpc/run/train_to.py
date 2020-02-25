@@ -42,15 +42,6 @@ def train():
         cfg = app_config
 
         setup_environment(cfg)
-        # o = np.ones(3)
-        # z = np.zeros(3)
-        # v = np.stack([o, z])
-        # myarr = torch.from_numpy(np.repeat(v, 8960, axis=0).reshape((128, 140, 3)))
-        # pc = myarr
-        # from util.point_cloud_to import pointcloud2voxels3d_fast
-        # pc_out = pointcloud2voxels3d_fast(cfg, pc, None)
-        # import pdb
-        # pdb.set_trace()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         train_dir = cfg.checkpoint_dir
         mkdir_if_missing(train_dir)
