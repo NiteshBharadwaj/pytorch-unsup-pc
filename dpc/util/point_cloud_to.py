@@ -30,9 +30,9 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     indices_floor = torch.floor(pc_grid)
     indices_int = indices_floor.long()
     batch_indices = torch.arange(0, batch_size, 1)
-    batch_indices = batch_indices.reshape(batch_indices.shape[0],1)
+    batch_indices = batch_indices.unsqueeze(-1)
     batch_indices = batch_indices.repeat(1,num_points)
-    batch_indices = batch_indices.reshape(batch_indices.shape[0], batch_indices.shape[1],1).to(device)
+    batch_indices = batch_indices.unsqueeze(-1)
     indices = torch.cat((batch_indices, indices_int), dim=2)
     indices = indices.reshape(-1,4)
     r = pc_grid - indices_floor  # fractional part
@@ -128,12 +128,12 @@ def pc_perspective_transform(cfg, point_cloud,
     if focal_length is None:
         focal_length = cfg.focal_length
     else:
-        focal_length = focal_length.reshape(focal_length.shape[0], focal_length.shape[1],1)
+        focal_length = focal_length.unsqueeze(-1)
 
     if cfg.pose_quaternion:
         pc2 = quaternion_rotate(point_cloud, transform)
         if predicted_translation is not None:
-            predicted_translation = predicted_translation.reshape(predicted_translation.shape[0],1, predicted_translation.shape[1])
+            predicted_translation = predicted_translation.unsqueeze(1)
             pc2 += predicted_translation
         xs = pc2[:,:,2:3]
         ys = pc2[:,:,1:2]
@@ -193,7 +193,7 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
                                      transform, predicted_translation,
                                      focal_length)
     voxels, voxels_rgb = pointcloud2voxels3d_fast(cfg, tr_pc, all_rgb)
-    voxels = voxels.reshape(voxels.shape[0], 1,voxels.shape[1], voxels.shape[2], voxels.shape[3])
+    voxels = voxels.unsqueeze(1)
     voxels_raw = voxels
 
     voxels = torch.clamp(voxels,0.0,1.0)
@@ -202,8 +202,11 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
         # TODO: Uncomment for GPU
         #
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        #if device == 'cuda':
-        #    voxels = smoothen_voxels3d(cfg, voxels, kernel)
+        if device == 'cuda':
+            voxels = smoothen_voxels3d(cfg, voxels, kernel)
+            voxels = voxels.squeeze(1).unsqueeze(-1)
+        else:
+            voxels = voxels.squeeze(1).unsqueeze(-1)
         #if has_rgb:
         #    if not cfg.pc_rgb_clip_after_conv:
         #        voxels_rgb = torch.clamp(voxels_rgb, 0.0, 1.0)
@@ -240,11 +243,11 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
         proj_rgb = util.drc.project_volume_rgb_integral(cfg, drc_probs, voxels_rgb)
     else:
         proj_rgb = None
-
-    proj = proj.permute(0,3,1,2)
-    proj_depth = proj_depth.permute(0,3,1,2)
-    if proj_rgb is not None:
-        proj_rgb = proj_rgb.permute(0,3,1,2)
+    #
+    # proj = proj.permute(0,3,1,2)
+    # proj_depth = proj_depth.permute(0,3,1,2)
+    # if proj_rgb is not None:
+    #     proj_rgb = proj_rgb.permute(0,3,1,2)
     output = {
         "proj": proj,
         "voxels": voxels,
@@ -276,7 +279,6 @@ def pc_point_dropout(points, rgb, keep_prob):
             inds = np.concatenate((ks, ind), axis=1)
             all_inds.append(np.expand_dims(inds, 0))
         return np.concatenate(tuple(all_inds), 0).astype(np.int64)
-
     selected_indices = sampler(num_output_points)
     selected_indices = torch.from_numpy(selected_indices)
     out_points = select_3d(points, selected_indices)

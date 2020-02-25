@@ -46,7 +46,7 @@ def slice_axis0(t, idx):
 
 def drc_event_probabilities_impl(voxels, cfg):
     # swap batch and Z dimensions for the ease of processing
-    input = voxels.permute(2, 0, 3, 4, 1)
+    input = voxels.permute(1,0,2,3,4)
 
     logsum = cfg.drc_logsum
     dtp = DTYPE

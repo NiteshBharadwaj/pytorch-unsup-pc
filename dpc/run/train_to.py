@@ -72,12 +72,13 @@ def train():
         for key in outputs.keys():
             if outputs[key] is not None:
                 print(key, outputs[key].mean(),outputs[key].std())
-        loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True)
+        loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True, global_step=0)
         print(loss)
 
         #import pdb
         #pdb.set_trace()
         ckpt_count = 1000
+        summary_count=100
         
         # loading pre existing model
         
@@ -85,6 +86,7 @@ def train():
         # creating a new model
         model = model_pc.ModelPointCloud(cfg, summary_writer, 0)
         log_dir = '../../dpc/run/model_run_data/'
+        mkdir_if_missing(log_dir)
         learning_rate = 1e-4
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         
@@ -119,10 +121,16 @@ def train():
                 
                 t2 = time.perf_counter()
                 # dummy loss function
-                loss = outputs['poses'][:,1].norm(2)
-                if global_step_val %ckpt_count ==0:
-                    summary_writer.add_image('prediction',outputs['projs'].detach().cpu().numpy()[0])
-                    summary_writer.add_image('actual',inputs['masks'].detach().cpu().numpy()[0])
+                if global_step_val % summary_count == 0:
+                    loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True,
+                                          global_step=global_step_val)
+                    summary_writer.add_image('prediction',
+                                             outputs['projs'].detach().cpu().numpy()[0].transpose(2, 0, 1),
+                                             global_step_val)
+                    summary_writer.add_image('actual', inputs['masks'].detach().cpu().numpy()[0].transpose(2, 0, 1),
+                                             global_step_val)
+                else:
+                    loss = model.get_loss(inputs, outputs, add_summary=False)
                 loss.backward()
                 optimizer.step()
                 del inputs

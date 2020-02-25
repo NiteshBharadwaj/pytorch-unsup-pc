@@ -46,9 +46,7 @@ def init_weights(m):
 
 def tf_repeat_0(input, num):
     orig_shape = input.shape
-    new_shape = [*input.shape].copy()
-    new_shape.insert(1,1)
-    e = input.reshape(new_shape)
+    e = input.unsqueeze(1)
     tiler = [1 for _ in range(len(orig_shape)+1)]
     tiler[1] = num
     tiled = e.repeat(tiler)
@@ -223,7 +221,10 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         outputs['points_1'] = pc
         outputs['rgb_1'] = decoder_out['rgb']
         outputs['scaling_factor'] = self.scalePred(outputs[key], is_training)
-        outputs['focal_length'] = self.focalPred(outputs['ids'], is_training)
+        if not cfg.learn_focal_length:
+            outputs['focal_length'] = None
+        else:
+            outputs['focal_length']= self.focalPred(outputs['ids'], is_training)
 
         if cfg.predict_pose:
             pose_out = self.poseNet(enc_outputs['poses'])
@@ -338,14 +339,14 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         return outputs
 
 
-    def add_proj_loss(self, inputs, outputs, weight_scale, summary_writer, add_summary):
+    def add_proj_loss(self, inputs, outputs, weight_scale, summary_writer, add_summary, global_step=0):
         cfg = self.cfg()
         gt = inputs['masks']
         pred = outputs['projs']
         num_samples = pred.shape[0]
 
-        gt_size = gt.shape[2]
-        pred_size = pred.shape[2]
+        gt_size = gt.shape[1]
+        pred_size = pred.shape[1]
         assert gt_size >= pred_size, "GT size should not be higher than prediction size"
         if gt_size > pred_size:
             n_dsmpl = gt_size//pred_size
@@ -367,9 +368,9 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         total_loss = 0
         num_candidates = cfg.pose_predict_num_candidates
         if num_candidates > 1:
-            proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs, summary_writer)
+            proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs, summary_writer, global_step)
             if cfg.pose_predictor_student:
-                student_loss = self.add_student_loss(inputs, outputs, min_loss, summary_writer, add_summary)
+                student_loss = self.add_student_loss(inputs, outputs, min_loss, summary_writer, add_summary, global_step)
                 total_loss += student_loss
         else:
             proj_loss = nn.MSELoss(gt - pred)
@@ -378,18 +379,19 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         total_loss += proj_loss
 
         if add_summary:
-            summary_writer.add_scalar("losses/proj_loss", proj_loss)
+            summary_writer.add_scalar("losses/proj_loss", proj_loss, global_step)
 
         total_loss *= weight_scale
         return total_loss
 
-    def get_loss(self, inputs, outputs, summary_writer, add_summary=True):
+    def get_loss(self, inputs, outputs, summary_writer=None, add_summary=True, global_step=0):
         """Computes the loss used for PTN paper (projection + volume loss)."""
         cfg = self.cfg()
+        inputs['masks'] = inputs['masks'].permute(0,2,3,1)
         g_loss = 0
 
         if cfg.proj_weight:
-            g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary)
+            g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary, global_step)
         
         if cfg.drc_weight:
             g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
@@ -401,11 +403,11 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             g_loss += add_proj_depth_loss(cfg, inputs, outputs, cfg.proj_depth_weight, self._sigma_rel, add_summary)
         
         if add_summary:
-            summary_writer.add_scalar("losses/total_task_loss", g_loss)
+            summary_writer.add_scalar("losses/total_task_loss", g_loss, global_step)
         
         return g_loss
 
-    def proj_loss_pose_candidates(self, gt, pred, inputs, summary_writer):
+    def proj_loss_pose_candidates(self, gt, pred, inputs, summary_writer, global_step=0):
         """
         :param gt: [BATCH*VIEWS, IM_SIZE, IM_SIZE, 1]
         :param pred: [BATCH*VIEWS*CANDIDATES, IM_SIZE, IM_SIZE, 1]
@@ -419,7 +421,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         all_loss = all_loss.reshape(-1, num_candidates) # [BATCH*VIEWS, CANDIDATES]
         min_loss = all_loss.argmin(1) # [BATCH*VIEWS]
         if summary_writer is not None:
-            summary_writer.add_histogram("winning_pose_candidates", min_loss)
+            summary_writer.add_histogram("winning_pose_candidates", min_loss, global_step)
 
         min_loss_mask = one_hot(min_loss, num_candidates) # [BATCH*VIEWS, CANDIDATES]
         num_samples = min_loss_mask.shape[0]
@@ -437,7 +439,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
 
         return proj_loss, min_loss
 
-    def add_student_loss(self, inputs, outputs, min_loss, summary_writer, add_summary):
+    def add_student_loss(self, inputs, outputs, min_loss, summary_writer, add_summary, global_step=0):
         cfg = self.cfg()
         num_candidates = cfg.pose_predict_num_candidates
 
@@ -446,11 +448,11 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         teachers = teachers.reshape(-1, num_candidates, 4)
 
         indices = min_loss
-        indices = indices.reshape(indices.shape[0],1)
+        indices = indices.unsqueeze(-1)
         batch_size = teachers.shape[0]
         batch_indices = torch.arange(0, batch_size, 1).long()
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        batch_indices = batch_indices.reshape(batch_indices.shape[0],1).to(device)
+        batch_indices = batch_indices.unsqueeze(-1).to(device)
         indices = torch.cat([batch_indices, indices], dim=1).long()
         teachers= teachers[indices[:,0],indices[:,1]]
         # use teachers only as ground truth
@@ -480,8 +482,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         num_samples = min_loss.shape[0]
         student_loss /= num_samples
 
-        if add_summary:
-            summary_writer.add_scalar("losses/pose_predictor_student_loss", student_loss)
+        if add_summary and summary_writer is not None:
+            summary_writer.add_scalar("losses/pose_predictor_student_loss", student_loss, global_step)
         student_loss *= cfg.pose_predictor_student_loss_weight
 
         return student_loss
