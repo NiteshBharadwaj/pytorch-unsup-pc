@@ -8,7 +8,7 @@ synth_set: "03001627"  # Class of Shapenet data
 num_views: 5  # Number of viewpoints in the input data.
 num_views_to_use: -1  # Num of views to actually use.
 tfrecords_gzip_compressed: true  # Compress TF record files.
-image_size: 32  # Input images dimension (pixels) - width & height.
+image_size: 128  # Input images dimension (pixels) - width & height.
 saved_camera: true
 saved_depth: false
 
@@ -74,7 +74,7 @@ focal_length_mean: 2.0
 decoder_conv_init_stdev: 0.02
 
 # Projection
-vox_size: 32  # Resolution of voxel grid.
+vox_size: 64  # Resolution of voxel grid.
 vox_size_z: -1  # Resolution of voxel grid along z.
 focal_length: 1.875  # Focal length parameter used in perspective projection.
 focal_range: 0.7  # Focal range parameter used in PTN.
@@ -133,7 +133,7 @@ save_predictions_dir: "pred"
 
 vis_threshold: 0.5  # voxel threshold for visualization
 vox_threshold: 0.5  # voxel threshold for evaluation
-vis_size: 32
+vis_size: 128
 
 vis_voxels: false  # actually means visualize any 3D data
 vis_depth_projs: false
@@ -172,4 +172,4 @@ render_cycles_samples: 500  # number of samples in CYCLES renderer
 render_colored_subsets: false
 
 
-input_shape: [32,32,3]
+input_shape: [128,128,3]

@@ -342,8 +342,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         pred = outputs['projs']
         num_samples = pred.shape[0]
 
-        gt_size = gt.shape[1]
-        pred_size = pred.shape[1]
+        gt_size = gt.shape[2]
+        pred_size = pred.shape[2]
         assert gt_size >= pred_size, "GT size should not be higher than prediction size"
         if gt_size > pred_size:
             n_dsmpl = gt_size//pred_size
@@ -362,6 +362,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             #     gt = tf.where(tf.less(sigma_rel, 1.0), gt, smoothed)
             # else:
             #     gt = smoothed
+        gt = gt.permute(0, 2, 3, 1)
+        inputs['masks'] = gt
         total_loss = 0
         num_candidates = cfg.pose_predict_num_candidates
         min_loss = None
@@ -385,7 +387,6 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
     def get_loss(self, inputs, outputs, summary_writer=None, add_summary=True, global_step=0):
         """Computes the loss used for PTN paper (projection + volume loss)."""
         cfg = self.cfg()
-        inputs['masks'] = inputs['masks'].permute(0,2,3,1)
         g_loss = 0
 
         if cfg.proj_weight:
