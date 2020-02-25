@@ -37,12 +37,11 @@ from util.fs import mkdir_if_missing
 #
 #     return tf.parse_single_example(serialized, features)
 
-
+import numpy as np
 def train():
         cfg = app_config
 
         setup_environment(cfg)
-        
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
         train_dir = cfg.checkpoint_dir
         mkdir_if_missing(train_dir)
@@ -70,6 +69,7 @@ def train():
         
         # creating a new model
         model = model_pc.ModelPointCloud(cfg, summary_writer, 0)
+        print(model.parameters)
         log_dir = '../../dpc/run/model_run_data/'
         mkdir_if_missing(log_dir)
         learning_rate = 1e-4

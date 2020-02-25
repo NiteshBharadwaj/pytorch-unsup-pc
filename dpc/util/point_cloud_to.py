@@ -40,7 +40,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
 
     if filter_outliers:
         valid = valid.reshape(-1)
-        indices = indices[valid]
+        indices = indices.masked_select(valid.unsqueeze(-1).repeat(1,4).bool()).reshape(-1,4)
 
     def interpolate_scatter3d(pos,voxels):
         updates_raw = rr[pos[0]][:, :, 0] * rr[pos[1]][:, :, 1] * rr[pos[2]][:, :, 2]
@@ -82,7 +82,6 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     t1 =time.perf_counter()
     #print('Voxel_time {}'.format(t1-t0))
     voxels_rgb = torch.sum(torch.stack(voxels_rgb),0) if has_rgb else None
-
     return voxels, voxels_rgb
 
 
