@@ -367,6 +367,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             #     gt = smoothed
         total_loss = 0
         num_candidates = cfg.pose_predict_num_candidates
+        min_loss = None
         if num_candidates > 1:
             proj_loss, min_loss = self.proj_loss_pose_candidates(gt, pred, inputs, summary_writer, global_step)
             if cfg.pose_predictor_student:
@@ -382,7 +383,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
             summary_writer.add_scalar("losses/proj_loss", proj_loss, global_step)
 
         total_loss *= weight_scale
-        return total_loss
+        return total_loss, min_loss
 
     def get_loss(self, inputs, outputs, summary_writer=None, add_summary=True, global_step=0):
         """Computes the loss used for PTN paper (projection + volume loss)."""
@@ -391,7 +392,8 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         g_loss = 0
 
         if cfg.proj_weight:
-            g_loss += self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary, global_step)
+            loss, min_loss = self.add_proj_loss(inputs, outputs, cfg.proj_weight, summary_writer, add_summary, global_step)
+            g_loss+=loss
         
         if cfg.drc_weight:
             g_loss += add_drc_loss(cfg, inputs, outputs, cfg.drc_weight, add_summary)
@@ -405,7 +407,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         if add_summary:
             summary_writer.add_scalar("losses/total_task_loss", g_loss, global_step)
         
-        return g_loss
+        return g_loss, min_loss
 
     def proj_loss_pose_candidates(self, gt, pred, inputs, summary_writer, global_step=0):
         """

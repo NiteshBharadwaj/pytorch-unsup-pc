@@ -59,21 +59,6 @@ def train():
         global_step = 0
         model = model_pc.ModelPointCloud(cfg, summary_writer, global_step)
         model = model.to(device)
-        train_data = next(iter(dataset_loader))
-        inputs = model.preprocess(train_data, cfg.step_size)
-        for k in inputs.keys():
-            try:
-                inputs[k] = inputs[k].to(device)
-            except AttributeError:
-                pass
-        
-        outputs = model(inputs, global_step, is_training=True, run_projection=True)
-        
-        for key in outputs.keys():
-            if outputs[key] is not None:
-                print(key, outputs[key].mean(),outputs[key].std())
-        loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True, global_step=0)
-        print(loss)
 
         #import pdb
         #pdb.set_trace()
@@ -122,15 +107,15 @@ def train():
                 t2 = time.perf_counter()
                 # dummy loss function
                 if global_step_val % summary_count == 0:
-                    loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True,
+                    loss, min_loss = model.get_loss(inputs, outputs, summary_writer, add_summary=True,
                                           global_step=global_step_val)
                     summary_writer.add_image('prediction',
-                                             outputs['projs'].detach().cpu().numpy()[0].transpose(2, 0, 1),
+                                             outputs['projs'].detach().cpu().numpy()[min_loss[0]].transpose(2, 0, 1),
                                              global_step_val)
                     summary_writer.add_image('actual', inputs['masks'].detach().cpu().numpy()[0].transpose(2, 0, 1),
                                              global_step_val)
                 else:
-                    loss = model.get_loss(inputs, outputs, add_summary=False)
+                    loss,_ = model.get_loss(inputs, outputs, add_summary=False)
                 loss.backward()
                 optimizer.step()
                 del inputs
