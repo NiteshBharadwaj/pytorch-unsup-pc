@@ -254,7 +254,7 @@ class ModelPointCloud(ModelBase):  # pylint:disable=invalid-name
         if is_training and cfg.pc_point_dropout != 1:
             dropout_prob = self.get_dropout_keep_prob(global_step)
             if is_training and summary_writer is not None:
-                summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob)
+                summary_writer.add_scalar("meta/pc_point_dropout_prob", dropout_prob, global_step)
             all_points, all_rgb = pc_point_dropout(all_points, all_rgb, dropout_prob)
         t1 = time.perf_counter()
         if cfg.pc_fast:
