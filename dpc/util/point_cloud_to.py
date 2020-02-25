@@ -28,11 +28,11 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     vox_size_tf = torch.from_numpy(np.array([[[vox_size_z, vox_size, vox_size]]])).to(device)
     pc_grid = (pc + half_size) * (vox_size_tf - 1)
     indices_floor = torch.floor(pc_grid)
-    indices_int = indices_floor.long().detach()
+    indices_int = indices_floor.long()
     batch_indices = torch.arange(0, batch_size, 1)
     batch_indices = batch_indices.unsqueeze(-1)
     batch_indices = batch_indices.repeat(1,num_points)
-    batch_indices = batch_indices.unsqueeze(-1)
+    batch_indices = batch_indices.unsqueeze(-1).to(device)
     indices = torch.cat((batch_indices, indices_int), dim=2)
     indices = indices.reshape(-1,4)
     r = pc_grid - indices_floor  # fractional part
