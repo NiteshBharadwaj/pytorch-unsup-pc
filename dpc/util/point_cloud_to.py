@@ -28,7 +28,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
     vox_size_tf = torch.from_numpy(np.array([[[vox_size_z, vox_size, vox_size]]])).to(device)
     pc_grid = (pc + half_size) * (vox_size_tf - 1)
     indices_floor = torch.floor(pc_grid)
-    indices_int = indices_floor.long()
+    indices_int = indices_floor.long().detach()
     batch_indices = torch.arange(0, batch_size, 1)
     batch_indices = batch_indices.unsqueeze(-1)
     batch_indices = batch_indices.repeat(1,num_points)
@@ -55,7 +55,8 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
         num_updates = indices_loc.shape[0]
         indices_shift = indices_shift.repeat(num_updates,1)
         indices_loc = indices_loc + indices_shift
-        voxels[indices_loc[:,0],indices_loc[:,1],indices_loc[:,2],indices_loc[:,3]] += updates
+        voxels_ = voxels.index_put_((indices_loc[:,0], indices_loc[:,1], indices_loc[:,2], indices_loc[:,3]), updates, accumulate=True)
+        voxels = voxels + voxels_
         if has_rgb:
             if cfg.pc_rgb_stop_points_gradient:
                 updates_raw = updates_raw.detach()
