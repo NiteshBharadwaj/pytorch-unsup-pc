@@ -46,16 +46,17 @@ def train():
         z = np.zeros(3)
         v = np.stack([o, z])
         np.random.seed(0)
-        cam = torch.from_numpy(np.random.random((128, 4)))
-        myarr = torch.from_numpy(np.random.random((128,140,3)))
-        scaling_factor = torch.from_numpy(np.random.random((128,1)))
+        cam = torch.from_numpy(np.random.random((128, 4))).float()
+        myarr = torch.from_numpy(np.random.random((128,140,3))).float()
+        scaling_factor = torch.from_numpy(np.random.random((128,1))).float()
         pc = myarr
-        global_step=30
+        global_step=0
 
         pc.requires_grad=True
         from util.point_cloud_to import smoothen_voxels3d, pointcloud_project_fast
         model = model_pc.ModelPointCloud(cfg)
         _sigma_rel, _gauss_sigma, _gauss_kernel = model.setup_sigma(None,global_step)
+
 
         pc_out = pointcloud_project_fast(cfg,pc,cam,None,None, _gauss_kernel, scaling_factor=scaling_factor)
         proj = pc_out['proj']

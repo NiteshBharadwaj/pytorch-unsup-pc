@@ -1,4 +1,5 @@
 import torch
+import pdb
 
 
 """
@@ -76,9 +77,9 @@ def drc_event_probabilities_impl(voxels, cfg):
     # ex. for vox_size=3 [1, x1, x1*x2, x1*x2*x3]
     if cfg.drc_tf_cumulative:
         if logsum:
-            r = x.sum(0, keepdim=True)
+            r = x.cumsum(0)
         else:
-            r = x.product(0, keepdim=True)
+            r = x.cumprod(0)
     else:
         depth = input.shape[0]
         collection = []
@@ -90,7 +91,7 @@ def drc_event_probabilities_impl(voxels, cfg):
             collection.append(current)
         r = torch.cat(collection, dim=0)
 
-    r = r.repeat(input.shape[0],1,1,1,1)
+    # r = r.repeat(input.shape[0],1,1,1,1)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     r1 = unity_fn(singleton_shape, dtype=dtp).to(device)
     p1 = torch.cat([r1, r], dim=0)  # [1, x1, x1*x2, x1*x2*x3]

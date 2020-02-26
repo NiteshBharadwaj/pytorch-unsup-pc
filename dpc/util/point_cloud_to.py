@@ -4,6 +4,7 @@ import util.drc
 from util.quaternion import quaternion_rotate
 import torch.nn.functional as F
 from util.camera import intrinsic_matrix
+import pdb
 # from util.point_cloud_distance import *
 
 def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
@@ -81,7 +82,7 @@ def pointcloud2voxels3d_fast(cfg, pc, rgb):  # [B,N,3]
                 vx, vx_rgb = interpolate_scatter3d([k, j, i],voxels)
                 voxels_rgb.append(vx_rgb)
     t1 =time.perf_counter()
-    #print('Voxel_time {}'.format(t1-t0))
+    print('Voxel_time {}'.format(t1-t0))
     voxels_rgb = torch.sum(torch.stack(voxels_rgb),0) if has_rgb else None
     return voxels, voxels_rgb
 
@@ -98,6 +99,7 @@ def smoothen_voxels3d(cfg, voxels, kernel):
         pad = np.array(kernel.shape[2:]) // 2
         pad = tuple(pad.astype(int).tolist())
         voxels = F.conv3d(voxels, kernel.double(),stride=1, padding=pad)
+
     return voxels
 
 
@@ -206,6 +208,7 @@ def pointcloud_project_fast(cfg, point_cloud, transform, predicted_translation,
             voxels = smoothen_voxels3d(cfg, voxels, kernel)
             voxels = voxels.squeeze(1).unsqueeze(-1)
         else:
+            # voxels = smoothen_voxels3d(cfg, voxels, kernel)
             voxels = voxels.squeeze(1).unsqueeze(-1)
         #if has_rgb:
         #    if not cfg.pc_rgb_clip_after_conv:

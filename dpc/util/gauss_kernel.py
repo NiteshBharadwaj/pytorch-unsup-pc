@@ -47,6 +47,7 @@ def smoothing_kernel(cfg, sigma):
         k1 = kernel_1d.reshape((1, 1, 1, 1, fsz))
         k2 = kernel_1d.reshape((1, 1, 1, fsz, 1))
         k3 = kernel_1d_z.reshape((1, 1, fsz, 1, 1))
+
         kernel = [k1, k2, k3]
     else:
         if cfg.pc_separable_gauss_filter:
