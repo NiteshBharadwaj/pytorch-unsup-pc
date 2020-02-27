@@ -35,7 +35,7 @@ cd data
 ### Train and Evaluate
 
 <p align="center">
-    <img src="resources/training.gif">
+    <img src="imgs/training.png">
 </p>
 
 To train and evaluate the full model without camera pose supervision execute the following:
@@ -43,31 +43,15 @@ To train and evaluate the full model without camera pose supervision execute the
 ```bash
 cd experiments/chair_unsupervised
 # train and compute accuracy on the validation set
-python ../../dpc/run/train_eval.py
+python ../../dpc/run/train_eval_to.py
 # compute accuracy on the test set
-python ../../dpc/run/predict_eval.py --eval_split=test
+python ../../dpc/run/predict_eval_to.py --eval_split=test
 ```
-
-You can use a `--gpu` flag to specify an ID of the GPU you want to run on.
-
-The file `chamfer_pred_test.txt` contains the accuracy of 3D shape reconstruction represented by the two quantities: coverage and precision. Chamfer distance metric is the sum of precision and coverage. More details on the evaluation metric can be found in the [paper](https://arxiv.org/pdf/1810.09381.pdf#section.5). 
-
-The file `pose_error_pred_test.txt` contains camera pose estimation error. The first quantity is accuracy at the 30° threshold and the second one is the median error in degrees.
-
-A configuration file to train a model with camera pose supervision is located in `experiments/chair_camera_supervision`.
-
 
 ### Visualise
 
-We provide a Jupyter notebook to visualise predicted shapes. The rendering code uses Blender, which you can install in the `external/` subdirectory under name `blender` or simply create a symlink, for example:
+Visualization code can be found in notebook `experiments/chair_unsupervised/visualise.ipynb`.
 
-```bash
-ln -s /path/to/blender-2.79b external/blender
-```
-
-After, you can lunch the notebook `experiments/visualise.ipynb`.
-
-![Teaser Image](resources/overview.png)
 
 ## Citation
 Please cite the original paper and (maybe) this codebase if it's helpful
