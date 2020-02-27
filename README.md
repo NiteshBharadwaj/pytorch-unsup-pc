@@ -5,7 +5,7 @@ Original tensorflow codebase [here](https://github.com/eldar/differentiable-poin
 ## Setup
 
 ### Install dependencies
-The code is in Python 3.6 and Torch >= 1.0. For supporting tensorboard, follow Torch >=1.4 is required.
+The code is in Python 3.6 and requires Torch >= 1.0. For supporting tensorboard, Torch >=1.4 is required.
 Install basic dependencies:
 
 ```bash
