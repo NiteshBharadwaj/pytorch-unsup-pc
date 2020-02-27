@@ -1,6 +1,6 @@
 # Pytorch Implementation of Unsupervised Learning of Shape and Pose with Differentiable Point Clouds
 
-Original tensorflow [codebase](https://github.com/eldar/differentiable-point-clouds/): 
+Original tensorflow codebase [here](https://github.com/eldar/differentiable-point-clouds/)
 
 ## Setup
 
