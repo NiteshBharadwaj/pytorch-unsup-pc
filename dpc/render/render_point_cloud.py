@@ -12,7 +12,7 @@ from util.common import build_command_line_args
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
-blender_exec = f'{script_dir}/../../external/blender/blender'
+blender_exec = f'{script_dir}/../../external/blender'
 python_script = f'{script_dir}/render_point_cloud_blender.py'.format(script_dir)
 
 

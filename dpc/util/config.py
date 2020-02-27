@@ -136,17 +136,21 @@ def setup_config_with_cmd_args():
     then looked up in yaml config file. Finally, if not found in the config
     file, a default parameter defined in default_config.py is used.
     """
-    args = parse_cmd_args(sys.argv[1:])
+
     configs = [{}]
-    if "config" in args:
-        configs.append(config_from_file(args["config"]))
-    elif os.path.isfile(CONFIG_DEFAULT_NAME):
+    print(CONFIG_DEFAULT_NAME)
+    if os.path.isfile(CONFIG_DEFAULT_NAME):
         # try load default config file in the directory
         configs.append(config_from_file(CONFIG_DEFAULT_NAME))
+    else:
+        args = parse_cmd_args(sys.argv[1:])
+        if "config" in args:
+            configs.append(config_from_file(args["config"]))
+        cfg = typify_args_bool_only(args)
+        config = _merge_a_into_b(cfg, config, type_conversion=True)
     config = merge_configs_recursive(configs)
 
-    cfg = typify_args_bool_only(args)
-    config = _merge_a_into_b(cfg, config, type_conversion=True)
+
     print_config(config)
     return config
 
