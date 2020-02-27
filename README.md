@@ -1,65 +1,37 @@
 # Unsupervised Learning of Shape and Pose with Differentiable Point Clouds
-Eldar Insafutdinov and Alexey Dosovitskiy.  
-Neural Information Processing Systems, 2018.
 
-Website: https://eldar.insafutdinov.com/PointClouds  
-Paper: https://arxiv.org/abs/1810.09381  
-
-![Teaser Image](resources/overview.png)
+Pytorch implementation of the tensorflow [codebase](https://github.com/eldar/differentiable-point-clouds/): 
 
 ## Setup
 
 ### Install dependencies
-The code is in Python 3.6 and Tensorflow >= 1.11. We provide instructions on how to install all dependencies with conda, but using pip should also work. We suggest downloading miniconda for python 3.
-
-Create Python 3.6 environment (some packages are not yet available for the more recent python 3.7):
-
-```bash
-conda create -n py36 python=3.6
-conda activate py36
-```
+The code is in Python 3.6 and Torch >= 1.0. For supporting tensorboard, follow Torch >=1.4 is required.
 Install basic dependencies:
 
 ```bash
 conda install numpy scikit-image pillow scipy scikit-learn pyyaml
 pip install easydict
-```
-
-Install open3d (more information can be found on the [official website](http://www.open3d.org/docs/getting_started.html#installing-from-pypi-or-conda)):
-
-```bash
 conda install -c open3d-admin open3d
+pip install tb-nightly
 ```
-
-Install TensorFlow:
-```bash
-pip install tensorflow-gpu
+Install blender from official repo and create a soft link in external folder
+```
+ln -s /path/to/blender-2.79b external/blender
 ```
 
 ### Prepare training data
-We use [Shapenet v1](https://www.shapenet.org) for all experiments in the paper.
+This follows Eldar's codebase but the files are saved as Pickle files. So, they take a bit more space than TF records. Viewpoints are saved offline.
 
-For convenience, we provide the rendered images, used for training, for the chair, car and airplane classes of the ShapeNet dataset (category ID `03001627`, `02958343` and `02691156` respectively):
+Chair: 03001627
+Car: 02958343
+Airplane: 02691156
 
 ```bash
 cd data
 ./download_train_data.sh 03001627
-```
-
-Convert training images to TFRecords format:
-
-```bash
-./create_tf_records.sh 03001627
-```
-
-Download pre-computed ground truth point clouds for evaluation:
-
-```bash
+./create_tf_records_to.sh 03001627
 ./download_ground_truth.sh 03001627
 ```
-
-You can also generate ground truth yourself as described [here](dpc/densify/README.md).
-
 ### Train and Evaluate
 
 <p align="center">
@@ -95,7 +67,10 @@ ln -s /path/to/blender-2.79b external/blender
 
 After, you can lunch the notebook `experiments/visualise.ipynb`.
 
+![Teaser Image](resources/overview.png)
+
 ## Citation
+Please cite the original paper and (maybe) this codebase if it's helpful
 
 ```
 @inproceedings{insafutdinov18pointclouds,
