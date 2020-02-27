@@ -13,3 +13,5 @@ checkpoints
 train*.sh
 ptn_data
 .ipynb_checkpoints
+pred
+pred_vis_proj

@@ -55,12 +55,7 @@ def train():
                                                      num_workers=4,drop_last=True)
         summary_writer = SummaryWriter(log_dir=train_dir, flush_secs=10)
 
-        global_step = 0
-        model = model_pc.ModelPointCloud(cfg)
-        model = model.to(device)
 
-        #import pdb
-        #pdb.set_trace()
         ckpt_count = 1000
         summary_count=100
         
@@ -69,17 +64,25 @@ def train():
         
         # creating a new model
         model = model_pc.ModelPointCloud(cfg)
+        model = model.to(device)
         print(model.parameters)
         log_dir = '../../dpc/run/model_run_data/'
         mkdir_if_missing(log_dir)
         learning_rate = 1e-4
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay = cfg.weight_decay)
-
-#         train_data = next(iter(dataset_loader))
-#         inputs = model.preprocess(train_data, cfg.step_size)
-
+        
         # training steps
-        global_step_val = 0
+        
+        global_step = 25000
+        if global_step>0:            
+            checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
+            print("Loading from path:",checkpoint_path)
+            checkpoint = torch.load(checkpoint_path)
+            global_step_val = checkpoint['global_step']
+            model.load_state_dict(checkpoint['model_state_dict'])
+            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        else:
+            global_step_val = global_step
         model.train()
         while global_step_val < cfg.max_number_of_steps:
             
