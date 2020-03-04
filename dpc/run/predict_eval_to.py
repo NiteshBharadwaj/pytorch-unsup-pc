@@ -3,13 +3,14 @@
 import startup
 
 import os
+import pdb
 import tensorflow as tf
 
 from util.app_config import config as app_config
 
 from run.predict_to import compute_predictions as compute_predictions_pc
-from run.eval_chamfer import run_eval
-from run.eval_camera_pose import run_eval as run_camera_pose_eval
+from run.eval_chamfer_to import run_eval
+from run.eval_camera_pose_to import run_eval as run_camera_pose_eval
 
 
 def compute_eval():
@@ -27,16 +28,17 @@ def compute_eval():
         cmd = f"python {script_dir}/compute_alignment.py {args}"
         subprocess.call(cmd, shell=True)
 
+    pdb.set_trace()
     run_eval()
 
     if cfg.predict_pose:
         run_camera_pose_eval()
 
 
-def main(_):
-    compute_eval()
+#def main(_):
+    #compute_eval()
 
 
 if __name__ == '__main__':
-    tf.app.run()
+    #tf.app.run()
     compute_eval()

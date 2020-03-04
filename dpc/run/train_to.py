@@ -73,7 +73,7 @@ def train():
         
         # training steps
         
-        global_step = 25000
+        global_step = 46000
         if global_step>0:            
             checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
             print("Loading from path:",checkpoint_path)
@@ -115,6 +115,7 @@ def train():
                                              global_step_val)
                     summary_writer.add_image('actual', inputs['masks'].detach().cpu().numpy()[0].transpose(2, 0, 1),
                                              global_step_val)
+                    #print(chamfer_distance( outputs['projs'].detach().cpu().numpy()[min_loss[0]].transpose(2, 0, 1), inputs['masks'].detach().cpu().numpy()[0].transpose(2, 0, 1))
                 else:
                     outputs = model(inputs, global_step_val, is_training=True, run_projection=True)
                     loss,_ = model.get_loss(inputs, outputs, add_summary=False)
