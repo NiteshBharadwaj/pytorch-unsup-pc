@@ -49,7 +49,7 @@ def train():
         split_name = "train"
         dataset_folder = cfg.inp_dir
 
-        dataset = ShapeRecords(dataset_folder, cfg)
+        dataset = ShapeRecords(dataset_folder, cfg,split_name)
         dataset_loader = torch.utils.data.DataLoader(dataset,
                                                      batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                      num_workers=4,drop_last=True)
@@ -73,7 +73,7 @@ def train():
         
         # training steps
         
-        global_step = 46000
+        global_step = 0
         if global_step>0:            
             checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
             print("Loading from path:",checkpoint_path)

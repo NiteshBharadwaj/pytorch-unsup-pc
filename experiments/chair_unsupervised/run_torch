@@ -1,0 +1,1 @@
+python ../../dpc/run/train_eval_to.py | tee log 

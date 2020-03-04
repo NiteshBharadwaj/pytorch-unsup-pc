@@ -6,7 +6,6 @@ import os
 
 import numpy as np
 import scipy.io
-import tensorflow as tf
 
 from util.point_cloud import point_cloud_distance
 from util.simple_dataset import Dataset3D
@@ -19,10 +18,10 @@ from torch.utils.tensorboard import SummaryWriter
 from models import model_pc_to as model_pc
 from util.system import setup_environment
 from run.ShapeRecords import ShapeRecords
-
+import pickle
 import pdb
 
-def compute_distance(cfg, sess, min_dist, idx, source, target, source_np, target_np):
+def compute_distance(cfg, source_np, target_np):
     """
     compute projection from source to target
     """
@@ -30,14 +29,17 @@ def compute_distance(cfg, sess, min_dist, idx, source, target, source_np, target
     partition = partition_range(source_np.shape[0], num_parts)
     min_dist_np = np.zeros((0,))
     idx_np = np.zeros((0,))
+    source_pc = torch.from_numpy(source_np).cuda()
+    target_pc = torch.from_numpy(target_np).cuda()
     for k in range(num_parts):
         r = partition[k, :]
-        src = source_np[r[0]:r[1]]
-        (min_dist_0_np, idx_0_np) = sess.run([min_dist, idx],
-                                             feed_dict={source: src,
-                                                       target: target_np})
+        src = source_pc[r[0]:r[1]]
+        _, min_dist, min_idx = point_cloud_distance(src, target_pc)
+        min_dist_0_np = min_dist.cpu().numpy()
+        idx_0_np = min_idx.cpu().numpy()
         min_dist_np = np.concatenate((min_dist_np, min_dist_0_np), axis=0)
         idx_np = np.concatenate((idx_np, idx_0_np), axis=0)
+
     return min_dist_np, idx_np
 
 
@@ -49,6 +51,7 @@ def run_eval():
     dataset_folder = cfg.inp_dir
 
     gt_dir = os.path.join(cfg.gt_pc_dir, cfg.synth_set)
+  
     #g = tf.Graph()
     #with g.as_default():
     #    source_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
@@ -67,8 +70,8 @@ def run_eval():
     save_pred_name = "{}_{}".format(cfg.save_predictions_dir, cfg.eval_split)
     save_dir = os.path.join(exp_dir, cfg.save_predictions_dir)
 
-    #if eval_unsup:
-    #    reference_rotation = scipy.io.loadmat("{}/final_reference_rotation.mat".format(exp_dir))["rotation"]
+    if eval_unsup:
+       reference_rotation = scipy.io.loadmat("{}/final_reference_rotation.mat".format(exp_dir))["rotation"]
     
 
     dataset = ShapeRecords(dataset_folder, cfg)
@@ -86,48 +89,36 @@ def run_eval():
         print("{}/{}".format(k, num_models))
         print(model_names[k])
         
-        gt_filename = "{}/{}.mat".format(gt_dir, model_names[k])
-        mat_filename = "{}/{}_pc.mat".format(save_dir, model_names[k])
-
-        print(gt_filename)
-        if not os.path.isfile(gt_filename):
+        gt_filename = "{}/{}.mat".format(gt_dir, model_names[k]).replace('_features.p','')
+        mat_filename = "{}/{}_pc.pkl".format(save_dir, model_names[k])
+        
+        if not os.path.isfile(gt_filename) or not os.path.isfile(mat_filename):
             continue
-
-        #mat_filename = "{}/{}_pc.mat".format(save_dir, model_names[k])
-        if os.path.isfile(mat_filename):
-            data = scipy.io.loadmat(mat_filename)
-            all_pcs = np.squeeze(data["points"])
-            if "num_points" in data:
-                all_pcs_nums = np.squeeze(data["num_points"])
-                has_number = True
-            else:
-                has_number = False
+        
+        with open(mat_filename, 'rb') as handle:
+            data = pickle.load(handle)
+        all_pcs = np.squeeze(data["points"])
+        if "num_points" in data:
+            all_pcs_nums = np.squeeze(data["num_points"])
+            has_number = True
         else:
-            data = np.load("{}/{}_pc.npz".format(save_dir, model_names[k]))
-            all_pcs = np.squeeze(data["arr_0"])
-            if 'arr_1' in list(data.keys()):
-                all_pcs_nums = np.squeeze(data["arr_1"])
-                has_number = True
-            else:
-                has_number = False
-
+            has_number = False
         obj = scipy.io.loadmat(gt_filename)
         Vgt = obj["points"]
-        print("CHECK") 
+        
         chamfer_dists_current = np.zeros((num_views, 2), dtype=np.float64)
         for i in range(num_views):
             pred = all_pcs[i, :, :]
             if has_number:
                 pred = pred[0:all_pcs_nums[i], :]
 
-            #if eval_unsup:
-            #    pred = np.expand_dims(pred, 0)
-            #    pred = sess.run(rotated_pc, feed_dict={source_pc_2: pred,
-            #                                           quat_tf: reference_rotation})
-            #    pred = np.squeeze(pred)
+            if eval_unsup:
+                pred = np.expand_dims(pred, 0)
+                pred = quaternion_rotate(torch.from_numpy(pred).cuda(), torch.from_numpy(reference_rotation).cuda()).cpu().numpy()
+                pred = np.squeeze(pred)
 
-            pred_to_gt, idx_np = compute_distance(cfg, sess, min_dist, min_idx, source_pc, target_pc, pred, Vgt)
-            gt_to_pred, _ = compute_distance(cfg, sess, min_dist, min_idx, source_pc, target_pc, Vgt, pred)
+            pred_to_gt, idx_np = compute_distance(cfg, pred, Vgt)
+            gt_to_pred, _ = compute_distance(cfg, Vgt, pred)
             chamfer_dists_current[i, 0] = np.mean(pred_to_gt)
             chamfer_dists_current[i, 1] = np.mean(gt_to_pred)
 

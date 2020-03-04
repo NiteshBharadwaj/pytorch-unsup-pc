@@ -4,17 +4,27 @@ import os
 import pickle
 import cv2
 import numpy as np
+import random
 
 class ShapeRecords(data.Dataset):
 
-    def __init__(self, dataset_folder, cfg=None):
+    def __init__(self, dataset_folder, cfg, split):
         self.dataset_folder = dataset_folder
         self.cfg = cfg
         self.file_names = []
+        self.split = split
+        self.split_file_name = os.path.join(dataset_folder,'../splits/{}_{}.txt'.format(cfg.synth_set,split))
+        with open(self.split_file_name) as f:
+            split_lines = f.readlines()
         for filename in os.listdir(dataset_folder):
             if filename.endswith(".p"):
-                self.file_names.append(filename)
-
+                for line in split_lines:
+                    if line.split('\n')[0] in filename:
+                        self.file_names.append(filename)
+        random.shuffle(self.file_names)
+        self.file_names = self.file_names[:cfg.num_dataset_samples]
+        print('Initialized dataset {} with size {}'.format(split,len(self.file_names)))
+        
     def __len__(self):
         return len(self.file_names)
 

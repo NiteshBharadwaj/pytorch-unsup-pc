@@ -25,7 +25,6 @@ from util.quaternion import as_rotation_matrix, quaternion_rotate
 
 from models import model_pc_to as model_pc
 from run.ShapeRecords import ShapeRecords
-import pickle
 
 def build_model(model, input, global_step):
     cfg = model.cfg()
@@ -136,7 +135,7 @@ def compute_predictions():
     split_name = "eval"
     dataset_folder = cfg.inp_dir
 
-    dataset = ShapeRecords(dataset_folder, cfg, split_name)
+    dataset = ShapeRecords(dataset_folder, cfg)
     dataset_loader = torch.utils.data.DataLoader(dataset,
                                                  batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                  num_workers=4,drop_last=True)
@@ -320,21 +319,16 @@ def compute_predictions():
 
         #grid_merged = merge_grid(cfg, grid)
         #imageio.imwrite("{}/{}_proj.png".format(save_dir, sample.file_names), grid_merged)
-        
+
         if save_pred:
-            if 0:
+            if cfg.save_as_mat:
                 save_dict = {"points": all_pcs}
                 if cfg.predict_pose:
                     save_dict["camera_pose"] = all_cameras
-                scipy.io.savemat("{}/{}_pc.mat".format(save_pred_dir, model_names[k]),
+                scipy.io.savemat("{}/{}_pc".format(save_pred_dir, model_names[k]),
                                  mdict=save_dict)
             else:
-                save_dict = {"points": all_pcs}
-                if cfg.predict_pose:
-                    save_dict["camera_pose"] = all_cameras
-                with open("{}/{}_pc.pkl".format(save_pred_dir, model_names[k]), 'wb') as handle:
-                    pickle.dump(save_dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
-  
+                np.savez("{}/{}_pc".format(save_pred_dir, model_names[k]), all_pcs)
 
 #             if save_voxels:
 #                 np.savez("{}/{}_vox".format(save_pred_dir,model_names[k]), all_voxels)
