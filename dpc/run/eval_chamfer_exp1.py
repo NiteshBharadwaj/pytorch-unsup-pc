@@ -1,23 +1,29 @@
 #!/usr/bin/env python
 
 import startup
-import torch
-from run.ShapeRecords import ShapeRecords
 
 import os
 
 import numpy as np
 import scipy.io
-import tensorflow as tf
 
 from util.point_cloud import point_cloud_distance
 from util.simple_dataset import Dataset3D
 from util.app_config import config as app_config
 from util.tools import partition_range, to_np_object
 from util.quaternion import quaternion_rotate
+from util.euler import ypr_from_campos
+
+import torch
+from torch.utils.tensorboard import SummaryWriter
+from models import model_pc_to as model_pc
+from util.system import setup_environment
+from run.ShapeRecords import ShapeRecords
+import pickle
+import pdb
 
 
-def compute_distance(cfg, sess, min_dist, idx, source, target, source_np, target_np):
+def compute_distance(cfg, source_np, target_np):
     """
     compute projection from source to target
     """
@@ -25,43 +31,43 @@ def compute_distance(cfg, sess, min_dist, idx, source, target, source_np, target
     partition = partition_range(source_np.shape[0], num_parts)
     min_dist_np = np.zeros((0,))
     idx_np = np.zeros((0,))
+    source_pc = torch.from_numpy(source_np).cuda()
+    target_pc = torch.from_numpy(target_np).cuda()
     for k in range(num_parts):
         r = partition[k, :]
-        src = source_np[r[0]:r[1]]
-        (min_dist_0_np, idx_0_np) = sess.run([min_dist, idx],
-                                             feed_dict={source: src,
-                                                       target: target_np})
+        src = source_pc[r[0]:r[1]]
+        _, min_dist, min_idx = point_cloud_distance(src, target_pc)
+        min_dist_0_np = min_dist.cpu().numpy()
+        idx_0_np = min_idx.cpu().numpy()
         min_dist_np = np.concatenate((min_dist_np, min_dist_0_np), axis=0)
         idx_np = np.concatenate((idx_np, idx_0_np), axis=0)
+
     return min_dist_np, idx_np
 
 
 def run_eval():
-    config = tf.ConfigProto(
-        device_count={'GPU': 1}
-    )
-
     cfg = app_config
     exp_dir = cfg.checkpoint_dir
     num_views = cfg.num_views
     eval_unsup = cfg.eval_unsupervised_shape
+    dataset_folder = cfg.inp_dir
 
     gt_dir = os.path.join(cfg.gt_pc_dir, cfg.synth_set)
 
-    g = tf.Graph()
-    with g.as_default():
-        source_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
-        target_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
-        quat_tf = tf.placeholder(dtype=tf.float64, shape=[1, 4])
+    # g = tf.Graph()
+    # with g.as_default():
+    #    source_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
+    #    target_pc = tf.placeholder(dtype=tf.float64, shape=[None, 3])
+    #    quat_tf = tf.placeholder(dtype=tf.float64, shape=[1, 4])
 
-        _, min_dist, min_idx = point_cloud_distance(source_pc, target_pc)
+    #    _, min_dist, min_idx = point_cloud_distance(source_pc, target_pc)
 
-        source_pc_2 = tf.placeholder(dtype=tf.float64, shape=[1, None, 3])
-        rotated_pc = quaternion_rotate(source_pc_2, quat_tf)
+    #    source_pc_2 = tf.placeholder(dtype=tf.float64, shape=[1, None, 3])
+    #    rotated_pc = quaternion_rotate(source_pc_2, quat_tf)
 
-        sess = tf.Session(config=config)
-        sess.run(tf.global_variables_initializer())
-        sess.run(tf.local_variables_initializer())
+    #    sess = tf.Session(config=config)
+    #    sess.run(tf.global_variables_initializer())
+    #    sess.run(tf.local_variables_initializer())
 
     save_pred_name = "{}_{}".format(cfg.save_predictions_dir, cfg.eval_split)
     save_dir = os.path.join(exp_dir, cfg.save_predictions_dir)
@@ -69,47 +75,39 @@ def run_eval():
     if eval_unsup:
         reference_rotation = scipy.io.loadmat("{}/final_reference_rotation.mat".format(exp_dir))["rotation"]
 
+    dataset = ShapeRecords(dataset_folder, cfg)
 
-    dataset = Dataset3D(cfg)
+    if cfg.models_list:
+        model_names = parse_lines(cfg.models_list)
+    else:
+        model_names = dataset.file_names
+    num_models = len(model_names)
 
-    num_models = dataset.num_samples()
-
-    model_names = []
     chamfer_dists = np.zeros((0, num_views, 2), dtype=np.float64)
     for k in range(num_models):
-        sample = dataset.data[k]
+        sample = dataset.__getitem__(k)
 
         print("{}/{}".format(k, num_models))
-        print(sample.name)
+        print(model_names[k])
 
-        gt_filename = "{}/{}.mat".format(gt_dir, sample.name)
-        if not os.path.isfile(gt_filename):
+        gt_filename = "{}/{}.mat".format(gt_dir, model_names[k]).replace('_features.p', '')
+        mat_filename = "{}/{}_pc.pkl".format(save_dir, model_names[k])
+
+        if not os.path.isfile(gt_filename) or not os.path.isfile(mat_filename):
             continue
 
-        model_names.append(sample.name)
-        mat_filename = "{}/{}_pc.mat".format(save_dir, sample.name)
-        if os.path.isfile(mat_filename):
-            data = scipy.io.loadmat(mat_filename)
-            all_pcs = np.squeeze(data["points"])
-            if "num_points" in data:
-                all_pcs_nums = np.squeeze(data["num_points"])
-                has_number = True
-            else:
-                has_number = False
+        with open(mat_filename, 'rb') as handle:
+            data = pickle.load(handle)
+        all_pcs = np.squeeze(data["points"])
+        if "num_points" in data:
+            all_pcs_nums = np.squeeze(data["num_points"])
+            has_number = True
         else:
-            data = np.load("{}/{}_pc.npz".format(save_dir, sample.name))
-            all_pcs = np.squeeze(data["arr_0"])
-            if 'arr_1' in list(data.keys()):
-                all_pcs_nums = np.squeeze(data["arr_1"])
-                has_number = True
-            else:
-                has_number = False
-
+            has_number = False
         obj = scipy.io.loadmat(gt_filename)
         Vgt = obj["points"]
 
         chamfer_dists_current = np.zeros((num_views, 2), dtype=np.float64)
-        # look at what views are
         for i in range(num_views):
             pred = all_pcs[i, :, :]
             if has_number:
@@ -117,17 +115,19 @@ def run_eval():
 
             if eval_unsup:
                 pred = np.expand_dims(pred, 0)
-                pred = sess.run(rotated_pc, feed_dict={source_pc_2: pred,
-                                                       quat_tf: reference_rotation})
+                pred = quaternion_rotate(torch.from_numpy(pred).cuda(),
+                                         torch.from_numpy(reference_rotation).cuda()).cpu().numpy()
                 pred = np.squeeze(pred)
 
-            pred_to_gt, idx_np = compute_distance(cfg, sess, min_dist, min_idx, source_pc, target_pc, pred, Vgt)
-            gt_to_pred, _ = compute_distance(cfg, sess, min_dist, min_idx, source_pc, target_pc, Vgt, pred)
+            pred_to_gt, idx_np = compute_distance(cfg, pred, Vgt)
+            gt_to_pred, _ = compute_distance(cfg, Vgt, pred)
             chamfer_dists_current[i, 0] = np.mean(pred_to_gt)
             chamfer_dists_current[i, 1] = np.mean(gt_to_pred)
 
             is_nan = np.isnan(pred_to_gt)
-            assert(not np.any(is_nan))
+            assert (not np.any(is_nan))
+
+            print(i, ":", chamfer_dists_current)
 
         current_mean = np.mean(chamfer_dists_current, 0)
         print("total:", current_mean)
@@ -145,6 +145,22 @@ def run_eval():
     file.close()
 
 
+def eval():
+    cfg = app_config
+
+    setup_environment(cfg)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    train_dir = cfg.checkpoint_dir
+
+    split_name = "eval"
+    dataset_folder = cfg.inp_dir
+
+    dataset = ShapeRecords(dataset_folder, cfg)
+    dataset_loader = torch.utils.data.DataLoader(dataset,
+                                                 batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
+                                                 num_workers=4, drop_last=True)
+    run_eval()
+
 def test_experiment():
     dataset_folder = cfg.inp_dir
 
@@ -152,13 +168,20 @@ def test_experiment():
     dataset_loader = torch.utils.data.DataLoader(dataset,
                                                  batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                  num_workers=4, drop_last=True)
-    sample = dataset.getitem(1)
+    sample = dataset.__getitem__(1)
+    campos = sample['cam_pos']
+
+    yaw, pitch, roll = ypr_from_campos(pos[0], pos[1], pos[2])
+    yaw = yaw + np.pi
+
+    print(yaw, pitch, roll)
 
 
-
-def main(_):
-    # run_eval()
+def main():
+    # eval()
     test_experiment()
 
+
 if __name__ == '__main__':
-    tf.app.run()
+    # tf.app.run()
+    main()
