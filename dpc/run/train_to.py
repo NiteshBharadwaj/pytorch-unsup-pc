@@ -73,7 +73,7 @@ def train():
         
         # training steps
         
-        global_step = 0
+        global_step = 48000
         if global_step>0:            
             checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
             print("Loading from path:",checkpoint_path)

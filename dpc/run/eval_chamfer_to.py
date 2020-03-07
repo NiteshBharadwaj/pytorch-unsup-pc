@@ -25,12 +25,13 @@ def compute_distance(cfg, source_np, target_np):
     """
     compute projection from source to target
     """
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     num_parts = cfg.pc_eval_chamfer_num_parts
     partition = partition_range(source_np.shape[0], num_parts)
     min_dist_np = np.zeros((0,))
     idx_np = np.zeros((0,))
-    source_pc = torch.from_numpy(source_np).cuda()
-    target_pc = torch.from_numpy(target_np).cuda()
+    source_pc = torch.from_numpy(source_np).to(device)
+    target_pc = torch.from_numpy(target_np).to(device)
     for k in range(num_parts):
         r = partition[k, :]
         src = source_pc[r[0]:r[1]]
@@ -69,12 +70,13 @@ def run_eval():
 
     save_pred_name = "{}_{}".format(cfg.save_predictions_dir, cfg.eval_split)
     save_dir = os.path.join(exp_dir, cfg.save_predictions_dir)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     if eval_unsup:
        reference_rotation = scipy.io.loadmat("{}/final_reference_rotation.mat".format(exp_dir))["rotation"]
     
 
-    dataset = ShapeRecords(dataset_folder, cfg)
+    dataset = ShapeRecords(dataset_folder, cfg,'test')
 
     if cfg.models_list:
         model_names = parse_lines(cfg.models_list)
@@ -114,7 +116,7 @@ def run_eval():
 
             if eval_unsup:
                 pred = np.expand_dims(pred, 0)
-                pred = quaternion_rotate(torch.from_numpy(pred).cuda(), torch.from_numpy(reference_rotation).cuda()).cpu().numpy()
+                pred = quaternion_rotate(torch.from_numpy(pred).to(device), torch.from_numpy(reference_rotation).to(device)).cpu().numpy()
                 pred = np.squeeze(pred)
 
             pred_to_gt, idx_np = compute_distance(cfg, pred, Vgt)
@@ -153,7 +155,7 @@ def eval():
     split_name = "eval"
     dataset_folder = cfg.inp_dir
 
-    dataset = ShapeRecords(dataset_folder, cfg)
+    dataset = ShapeRecords(dataset_folder, cfg,'test')
     dataset_loader = torch.utils.data.DataLoader(dataset,
                                                  batch_size=cfg.batch_size, shuffle=cfg.shuffle_dataset,
                                                  num_workers=4,drop_last=True)

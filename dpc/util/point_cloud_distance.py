@@ -33,7 +33,8 @@ def point_cloud_distance(Vs, Vt):
     diff = Vt_rep-Vs_rep
     dist = torch.sqrt(torch.sum(diff**2, 2))  # [VsN,VtN]
     idx = torch.argmin(dist, dim=1).long()
-    act_idxs = torch.stack([torch.arange(VsN).cuda(), idx], dim=1)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    act_idxs = torch.stack([torch.arange(VsN).to(device), idx], dim=1)
     proj = Vt_rep[act_idxs[:,0],act_idxs[:,1]]
     minDist = dist[act_idxs[:,0],act_idxs[:,1]]
     return proj, minDist, idx

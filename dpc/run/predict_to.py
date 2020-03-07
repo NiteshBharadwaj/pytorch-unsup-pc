@@ -113,7 +113,7 @@ def compute_predictions():
     log_dir = '../../dpc/run/model_run_data/'
     learning_rate = 1e-4
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay = cfg.weight_decay)
-    global_step = 90000
+    global_step = 100000
     if global_step>0:
         checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
         print("Loading from path:",checkpoint_path)
@@ -133,7 +133,7 @@ def compute_predictions():
 
     vis_size = cfg.vis_size
 
-    split_name = "eval"
+    split_name = "test"
     dataset_folder = cfg.inp_dir
 
     dataset = ShapeRecords(dataset_folder, cfg, split_name)

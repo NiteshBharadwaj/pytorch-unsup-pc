@@ -6,4 +6,6 @@ data/tf_records/*
 *.0
 dpc/run/model_run_data
 experiments/chair_unsupervised/log
+*.mat
+*.pth
 

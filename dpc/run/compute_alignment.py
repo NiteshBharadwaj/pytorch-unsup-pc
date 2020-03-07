@@ -132,9 +132,9 @@ def compute_alignment():
 
     exp_dir = cfg.checkpoint_dir
 
-    cfg.num_dataset_samples = 150
+    cfg.num_dataset_samples = 50
     dataset_folder = cfg.inp_dir
-    dataset = ShapeRecords(dataset_folder, cfg)
+    dataset = ShapeRecords(dataset_folder, cfg,'test')
 
     num_to_estimate = 15
     num_models = len(dataset)
