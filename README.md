@@ -52,7 +52,7 @@ python ../../dpc/run/predict_eval_to.py --eval_split=test
 
 | Model | Paper | Our Implementation|
 ---|---|---
-| Chairs| 3.62  | 3.58|
+| Chairs Unsupervised| 3.62  | 3.58|
 
 Note that our results are obtained using image resolution of 128^2 and voxel resolution 64^3, trained for 100000 iterations and paper's results are for a voxel resolution of 128^3 trained for 600000 iterations.
 
