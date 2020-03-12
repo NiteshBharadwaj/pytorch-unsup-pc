@@ -50,9 +50,10 @@ python ../../dpc/run/predict_eval_to.py --eval_split=test
 
 ### Evaluation Results
 
-| Model | Paper | Our Implementation|
----|---|---
-| Chairs Unsupervised| 3.62  | 3.58|
+| Model | Paper(128^3) | Paper(64^3) | Our Implementation (64^3)|
+---|---|---|---
+| Chairs Unsupervised| 3.62 |4.15 | **3.58**|
+| Airplane Unsupervised| **2.84** |3.50 | 3.06|
 
 Note that our results are obtained using image resolution of 128^2 and voxel resolution 64^3, trained for 100000 iterations and paper's results are for a voxel resolution of 128^3 trained for 600000 iterations.
 
