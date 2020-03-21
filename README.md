@@ -49,11 +49,10 @@ python ../../dpc/run/predict_eval_to.py --eval_split=test
 ```
 
 ### Evaluation Results
-
-| Model | Paper(128^3) | Paper(64^3) | Our Implementation (64^3)|
+| Model | Paper-128^3 occupancy grid, 16000 points, 600k  iterations | MVC | Our Implementation (64^3 occupancy grid, 8000 points, 100k iterations)|
 ---|---|---|---
-| Chairs Unsupervised| 3.62 |4.15 | **3.58**|
-| Airplane Unsupervised| **2.84** |3.50 | 3.06|
+| Chairs Unsupervised| 4.30 |6.51 | 7.16|
+| Airplane Unsupervised| 3.91 |4.43 | 6.12|
 
 Note that our results are obtained using image resolution of 128^2 and voxel resolution 64^3, trained for 100000 iterations and paper's results are for a voxel resolution of 128^3 trained for 600000 iterations.
 
@@ -63,6 +62,9 @@ Note that our results are obtained using image resolution of 128^2 and voxel res
 
 Visualization code can be found in notebook `experiments/chair_unsupervised/visualise.ipynb`.
 
+
+### Scene Editing
+![scale_gif](extra_imgs/ext/gif_scale.gif)  ![trans_gif](extra_imgs/ext/gih_trans.gif)
 
 ## Citation
 Please cite the original paper and (maybe) this codebase if it's helpful
