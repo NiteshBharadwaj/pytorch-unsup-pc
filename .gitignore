@@ -8,4 +8,5 @@ dpc/run/model_run_data
 experiments/chair_unsupervised/log
 *.mat
 *.pth
+/data/other_data/*
 

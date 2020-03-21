@@ -66,14 +66,14 @@ def train():
         model = model_pc.ModelPointCloud(cfg)
         model = model.to(device)
         print(model.parameters)
-        log_dir = '../../dpc/run/model_run_data/'
+        log_dir = '../../dpc/run/model_run_data_lamp/'
         mkdir_if_missing(log_dir)
         learning_rate = 1e-4
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay = cfg.weight_decay)
         
         # training steps
         
-        global_step = 48000
+        global_step = 38000
         if global_step>0:            
             checkpoint_path = os.path.join(log_dir,'model.ckpt_{}.pth'.format(global_step))
             print("Loading from path:",checkpoint_path)

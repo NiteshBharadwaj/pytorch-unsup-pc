@@ -228,7 +228,6 @@ def load_drc_split(base_dir, synth_set):
 def generate_records(synth_set):
     base_dir = FLAGS.split_dir
     split = load_drc_split(base_dir, synth_set)
-
     for key, value in split.items():
         create_record(synth_set, key, value)
 

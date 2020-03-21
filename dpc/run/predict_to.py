@@ -133,7 +133,7 @@ def compute_predictions():
 
     vis_size = cfg.vis_size
 
-    split_name = "test"
+    split_name = "val"
     dataset_folder = cfg.inp_dir
 
     dataset = ShapeRecords(dataset_folder, cfg, split_name)
