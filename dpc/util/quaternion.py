@@ -91,6 +91,10 @@ def quaternion_conjugate(q):
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     conj_array = torch.from_numpy(np.array([1.0, -1.0, -1.0, -1.0])).to(device)
     return q * conj_array
+def quaternion_conjugate_np(q):
+    """Compute the conjugate of q, i.e. [q.w, -q.x, -q.y, -q.z]."""
+    conj_array = np.array([1.0, -1.0, -1.0, -1.0])
+    return q * conj_array
 
 
 def quaternion_normalise(q):
